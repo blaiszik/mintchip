@@ -1,98 +1,94 @@
-"""mintchip — Zero-dependency word-sized visual chips for AI agents, scientists, and prose."""
+"""mintchip: word-sized graphics for numbers, in text, SVG and HTML, with no dependencies.
+
+A chip is a small data record (``mintchip.spark([...])``); drawing happens when you render it
+with ``.text()``, ``.svg()``, ``.html()`` or ``.markdown()``.
+"""
 
 from __future__ import annotations
 
-from .change import delta, scatter, waterfall
-from .composition import funnel, ratio, share
-from .core import (
-    Chip,
-    ChipError,
-    InlineGraphic,
-    bar,
-    ci,
-    dist,
-    document,
-    format_prose,
-    shared_domain,
-    spark,
-    strip,
-)
-from .evidence import evidence, gauge, quantiles
-from .structure import dual_spark, rank, timeline
-from .themes import (
-    PALETTES,
-    THEMES,
-    ChipPalette,
-    Theme,
-    apply_accent,
-    apply_palette,
-    contrast_ratio,
-    get_palette,
-    get_theme,
-    relative_luminance,
-)
+import importlib
+from typing import Any
 
-__version__ = "0.1.0"
+from . import chips as _chips  # noqa: F401  (registers every chip kind found in chips/)
+from .chips.bar import bar
+from .chips.ci import ci
+from .chips.delta import delta
+from .chips.dist import dist
+from .chips.funnel import funnel
+from .chips.gauge import gauge
+from .chips.num import num
+from .chips.rank import rank
+from .chips.ratio import ratio
+from .chips.share import share
+from .chips.spark import spark
+from .chips.strip import strip
+from .chips.timeline import timeline
+from .chips.waterfall import waterfall
+from .scales import shared_domain, union_domain
+from .spec import REGISTRY, Chip, ChipError, Kind, Param, catalog, from_dict
+from .themes import THEMES, Theme, contrast_ratio, relative_luminance
 
-CATALOG: tuple[dict[str, str], ...] = (
-    # Core (5)
-    {"name": "spark", "family": "core", "question": "How did a value evolve over steps or time?"},
-    {"name": "ci", "family": "core", "question": "What is the estimate and uncertainty vs. null?"},
-    {"name": "dist", "family": "core", "question": "How are raw observations spread (skew & outliers)?"},
-    {"name": "bar", "family": "core", "question": "How large is a ratio or score vs. baseline & target?"},
-    {"name": "strip", "family": "core", "question": "Which seeds/checks passed, warned, failed, or shifted?"},
-    # Change, Attribution & Tradeoffs (3)
-    {"name": "delta", "family": "change", "question": "How far and in what direction did a value move?"},
-    {"name": "waterfall", "family": "change", "question": "Which positive and negative drivers summed to the net change?"},
-    {"name": "scatter", "family": "change", "question": "How do two measures correlate or sit on a Pareto frontier?"},
-    # Composition, Funnels & Natural Frequencies (3)
-    {"name": "share", "family": "composition", "question": "How is a whole divided across categories (never a pie)?"},
-    {"name": "funnel", "family": "composition", "question": "Where did items drop off across sequential pipeline stages?"},
-    {"name": "ratio", "family": "composition", "question": "What does a probability or count feel like in natural frequencies?"},
-    # Operating Windows, Uncertainty & Evidence (3)
-    {"name": "gauge", "family": "evidence", "question": "Where does a reading sit inside normal and caution limits?"},
-    {"name": "quantiles", "family": "evidence", "question": "What is the predictive probability mass relative to a threshold?"},
-    {"name": "evidence", "family": "evidence", "question": "How strong is the statistical evidence given effect and n?"},
-    # Structure, Timelines & Comparisons (3)
-    {"name": "timeline", "family": "structure", "question": "Where did wall-clock time go and which phase was the bottleneck?"},
-    {"name": "rank", "family": "structure", "question": "Where does this entity sit in its cohort or leaderboard?"},
-    {"name": "dual_spark", "family": "structure", "question": "How did two paired trajectories diverge or cross over time?"},
-)
+__version__ = "0.2.0.dev0"
+
+CATALOG = catalog()
+
+# Loaded on first use, so `import mintchip` pays only for chips and text.
+_LAZY = {
+    "Table": "tables",
+    "table": "tables",
+    "format_prose": "prose",
+    "lint": "prose",
+    "css": "render.html",
+    "document": "render.html",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module = _LAZY.get(name)
+    if module is None:
+        raise AttributeError(f"module 'mintchip' has no attribute {name!r}")
+    value = getattr(importlib.import_module(f"{__name__}.{module}"), name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(__all__)
+
 
 __all__ = [
     "CATALOG",
-    "PALETTES",
+    "REGISTRY",
     "THEMES",
     "Chip",
     "ChipError",
-    "ChipPalette",
-    "InlineGraphic",
+    "Kind",
+    "Param",
+    "Table",
     "Theme",
     "__version__",
-    "apply_accent",
-    "apply_palette",
     "bar",
     "ci",
     "contrast_ratio",
+    "css",
     "delta",
     "dist",
     "document",
-    "dual_spark",
-    "evidence",
     "format_prose",
+    "from_dict",
     "funnel",
     "gauge",
-    "get_palette",
-    "get_theme",
-    "quantiles",
+    "lint",
+    "num",
     "rank",
     "ratio",
     "relative_luminance",
-    "scatter",
     "share",
     "shared_domain",
     "spark",
     "strip",
+    "table",
     "timeline",
+    "union_domain",
     "waterfall",
 ]

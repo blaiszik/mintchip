@@ -1,0 +1,3 @@
+text: 5/8 pass (1 fail, 1 warn, 1 skip) ███▄█×█·
+ascii: 5/8 pass (1 fail, 1 warn, 1 skip) ###~#x#.
+compact: 5/8 pass ███▄█×█·

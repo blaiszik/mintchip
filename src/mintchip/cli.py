@@ -1,167 +1,656 @@
-"""Command-line interface for ``mintchip``."""
+"""Command line, generated from the chip registry.
+
+``mintchip <kind> …`` for every registered kind, plus ``render`` (prose with ``{{…}}``
+directives), ``table``, ``guide``, ``schema`` and ``catalog``. stdout carries only the result;
+warnings go to stderr as ``mintchip: warning: …`` (exit 1 under ``--strict``), and errors as
+``mintchip: error: …`` with a ``fix:`` line (exit 2).
+"""
 
 from __future__ import annotations
 
 import argparse
+import csv
+import difflib
 import json
+import re
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Any
 
 import mintchip as mc
 
+from .directives import (
+    SYNTAX,
+    DirectiveError,
+    call_text,
+    example_call,
+    metavar,
+    parse_tokens,
+)
+from .spec import REGISTRY, Chip, ChipError, Param
 
-def _demo_chips(style: str = "default", palette: str | None = None) -> dict[str, mc.Chip]:
-    ci_dom = mc.shared_domain((0.05, 0.11), (-0.024, 0.048), reference=0.0)
-    delta_dom = mc.shared_domain(0.65, 0.88)
-    samples_q = [
-        14.2, 16.0, 17.5, 18.1, 18.9, 19.3, 19.8, 20.1, 20.6, 21.0,
-        21.4, 21.9, 22.3, 22.8, 23.4, 24.1, 24.8, 26.2, 28.5, 31.4,
+FORMATS = ("text", "ansi", "md", "svg", "html", "json")
+OUTPUT = (
+    Param(
+        "format",
+        "string",
+        "Choose the output: text (default), ansi (colour), md (code span), svg, html or json.",
+        default="text",
+        choices=FORMATS,
+    ),
+    Param("ascii", "bool", "Print pure ASCII.", default=False),
+    Param("compact", "bool", "Shorten the value for use mid-sentence.", default=False),
+    Param("strict", "bool", "Exit 1 if the chip has warnings.", default=False),
+)
+COMMANDS = ("render", "table", "guide", "schema", "catalog")
+TABLE_EXAMPLE = "mintchip table results.json --col model --col acc:bar --col lift:ci --sort acc"
+
+
+# --- output helpers -------------------------------------------------------------------------
+def _out(text: str) -> None:
+    """Write to stdout, newline-terminated, without newline translation where possible."""
+    if not text.endswith("\n"):
+        text += "\n"
+    _write_raw(text)
+
+
+def _write_raw(text: str) -> None:
+    buf = getattr(sys.stdout, "buffer", None)
+    if buf is None:
+        sys.stdout.write(text)
+        return
+    sys.stdout.flush()
+    buf.write(text.encode("utf-8", "surrogateescape"))
+    buf.flush()
+
+
+def _err(line: str) -> None:
+    print(line, file=sys.stderr)
+
+
+def _error(e: ChipError, example: str | None = None) -> int:
+    errors = e.errors if isinstance(e, DirectiveError) else [(None, e)]
+    for where, err in errors:
+        msg = err.message
+        msg = re.sub(r"^mintchip(: |\.| )", "", msg)
+        _err(f"mintchip: error: {where}: {msg}" if where else f"mintchip: error: {msg}")
+        if err.fix_hint:
+            _err(f"  fix: {err.fix_hint}")
+    hint = errors[-1][1].fix_hint or ""
+    if example and "mintchip " not in hint:
+        _err(f"  example: {example}")
+    return 2
+
+
+def _warn(warnings: Iterable[str], strict: bool) -> int:
+    warnings = list(warnings)
+    for w in warnings:
+        _err(f"mintchip: warning: {w}")
+    return 1 if strict and warnings else 0
+
+
+def _code_span(s: str) -> str:
+    return f"`` {s} ``" if "`" in s else f"`{s}`"
+
+
+def _read(path: str) -> str:
+    """Read a file or stdin (``-``) as text, keeping line endings and undecodable bytes."""
+    try:
+        if path == "-":
+            buf = getattr(sys.stdin, "buffer", None)
+            data = buf.read() if buf is not None else sys.stdin.read().encode()
+        else:
+            data = Path(path).read_bytes()
+    except OSError as e:
+        raise ChipError(
+            f"mintchip: cannot read {path!r}: {e.strerror}.",
+            fix_hint="Pass an existing file, or - to read stdin.",
+        ) from None
+    return data.decode("utf-8", "surrogateescape")
+
+
+# --- kind commands --------------------------------------------------------------------------
+def chip_output(c: Chip, *, format: str = "text", ascii: bool = False, compact: bool = False):
+    """The text a kind command prints for ``c`` in ``format``."""
+    if format == "text":
+        return c.text(ascii=ascii, compact=compact)
+    if format == "ansi":
+        return c.text(ascii=ascii, compact=compact, color=True)
+    if format == "md":
+        return _code_span(c.text(ascii=ascii, compact=compact))
+    if format == "svg":
+        svg = c.svg(standalone=True)
+        if not svg:
+            raise ChipError(
+                f"mintchip.{c.kind} has no graphic.", fix_hint="Use --format text, md or html."
+            )
+        return svg
+    if format == "html":
+        return c.html()
+    if format == "json":
+        return json.dumps({**c.summary(), "spec": c.to_dict()}, indent=2, ensure_ascii=ascii)
+    raise _bad_format(format, FORMATS)
+
+
+def _bad_format(fmt: str, allowed: Sequence[str]) -> ChipError:
+    close = difflib.get_close_matches(fmt, allowed, n=1, cutoff=0.5)
+    alias = "md" if fmt in ("markdown", "gfm") and "md" in allowed else None
+    best = alias or (close[0] if close else None)
+    hint = f"Use --format {best}." if best else f"Use one of: {', '.join(allowed)}."
+    return ChipError(f"mintchip: unknown format {fmt!r}.", fix_hint=hint)
+
+
+def _cmd_kind(kind: str, tokens: Sequence[str]) -> int:
+    example = example_call(kind)
+    try:
+        kw = parse_tokens(kind, tokens, extra=OUTPUT, style="cli")
+        opts = {p.name: kw.pop(p.name, p.default) for p in OUTPUT}
+        if opts["format"] not in FORMATS:
+            raise _bad_format(opts["format"], FORMATS)
+        c = REGISTRY[kind].fn(**kw)
+        text = chip_output(c, format=opts["format"], ascii=opts["ascii"], compact=opts["compact"])
+    except ChipError as e:
+        return _error(e, example)
+    _out(text)
+    return _warn(c.warnings, opts["strict"])
+
+
+# --- render ---------------------------------------------------------------------------------
+def _cmd_render(args: argparse.Namespace) -> int:
+    from . import directives
+
+    text = _read(args.file)
+    title = args.title or (Path(args.file).stem if args.file != "-" else "mintchip")
+    try:
+        out, found = directives.render(
+            text, format=args.format, ascii=args.ascii, compact=args.compact, title=title
+        )
+    except ChipError as e:
+        return _error(e)
+    if args.format == "html":
+        _out(out)
+    else:
+        _write_raw(out)
+    warnings = [
+        f"{d.where}: {w}" for d in found for w in (d.chip.warnings_for(d.domain) if d.chip else ())
     ]
-    xs = [1.0, 1.8, 2.5, 3.3, 4.1, 4.9, 5.8, 6.6, 7.5, 8.4, 9.2, 10.0]
-    ys = [1.8, 2.9, 2.3, 4.6, 3.8, 5.9, 5.2, 7.6, 6.7, 8.9, 8.2, 9.8]
-    kw = {"style": style, "palette": palette}
+    code = _warn(warnings, args.strict)
+    if args.check:
+        notes = _lint(text, found)
+        for n in notes:
+            _err(f"mintchip: check: {n}")
+        if notes and args.strict:
+            code = 1
+    return code
+
+
+def _lint(text: str, found: list[Any]) -> list[str]:
+    """Density checks from ``mintchip.lint``, with each directive standing in as a
+    placeholder; chips' own warnings are left out (they were already printed). A crowded
+    sentence is quoted as written, its directives' locations after the quote."""
+    chips: dict[str, Chip] = {}
+    shown: dict[str, str] = {}
+    written: dict[str, tuple[str, str]] = {}
+    parts, pos = [], 0
+    for n, d in enumerate(found):
+        name = f"d{n}"
+        chips[name] = d.chip
+        shown["{" + name + "}"] = f"{{{{{d.chip.kind}}}}} at {d.line}:{d.col}"
+        written[name] = (d.source, f"{d.line}:{d.col}")
+        parts += [text[pos : d.start], "{" + name + "}"]
+        pos = d.end
+    parts.append(text[pos:])
+    notes = []
+    for m in mc.lint("".join(parts), chips, written=written):
+        if any(m.startswith(f"{slot}: ") for slot in shown):
+            continue
+        for slot, label in shown.items():
+            m = m.replace(slot, label)
+        notes.append(m)
+    return notes
+
+
+# --- table ----------------------------------------------------------------------------------
+def table_columns(cols: Sequence[str], sets: Sequence[str]) -> dict[str, Any] | None:
+    """Columns for ``mintchip.table`` from ``--col key[:kind[:header]]`` and
+    ``--set key.option=value`` arguments."""
+    if not cols:
+        if sets:
+            raise ChipError(
+                "mintchip table: --set needs the column listed with --col.",
+                fix_hint=f"e.g. {TABLE_EXAMPLE} --set acc.target=0.9",
+            )
+        return None
+    columns: dict[str, dict[str, Any]] = {}
+    for spec in cols:
+        key, _, rest = spec.partition(":")
+        kind, _, header = rest.partition(":")
+        kind = kind.strip()
+        if not key:
+            raise ChipError(
+                f"mintchip table: --col {spec!r} has no key.", fix_hint="Write --col KEY:KIND."
+            )
+        if kind and kind != "text" and kind not in REGISTRY:
+            names = ["text", *REGISTRY]
+            close = difflib.get_close_matches(kind, names, n=1)
+            hint = f"Did you mean --col {key}:{close[0]}? " if close else ""
+            raise ChipError(
+                f"mintchip table: unknown column kind {kind!r} in --col {spec!r}.",
+                fix_hint=f"{hint}Kinds: {', '.join(names)}.",
+            )
+        columns[key] = {
+            **({"chip": kind} if kind else {}),
+            **({"header": header} if header else {}),
+        }
+    for s in sets:
+        lhs, eq, value = s.partition("=")
+        key, dot, opt = lhs.rpartition(".")
+        if not (eq and dot and key and opt):
+            raise ChipError(
+                f"mintchip table: --set {s!r} must be KEY.OPTION=VALUE.",
+                fix_hint="e.g. --set acc.target=0.9",
+            )
+        if key not in columns:
+            raise ChipError(
+                f"mintchip table: --set {s!r} names column {key!r}, which has no --col.",
+                fix_hint=f"Add --col {key}:KIND first. Columns: {', '.join(columns)}.",
+            )
+        kind = columns[key].get("chip")
+        if opt == "header":
+            columns[key]["header"] = value
+        elif opt == "share":
+            columns[key]["share"] = value.lower() not in ("false", "no", "0")
+        elif kind in (None, "text"):
+            raise ChipError(
+                f"mintchip table: column {key!r} has no chip kind, so only header can be set.",
+                fix_hint=f"Give it a kind, e.g. --col {key}:bar.",
+            )
+        else:
+            names = [p.name for p in REGISTRY[kind].params]
+            if opt.replace("-", "_") not in names:
+                close = difflib.get_close_matches(opt, names, n=1)
+                hint = f"Did you mean --set {key}.{close[0]}=…? " if close else ""
+                raise ChipError(
+                    f"mintchip table: {kind} has no option {opt!r} (in --set {s!r}).",
+                    fix_hint=f"{hint}Options: {', '.join([*names, 'header', 'share'])}.",
+                )
+            columns[key].update(parse_tokens(kind, [f"{opt}={value}"], partial=True))
+    return {k: (v["chip"] if list(v) == ["chip"] else v) for k, v in columns.items()}
+
+
+def _table_rows(path: str) -> Any:
+    """A path ``mintchip.table`` can read, or rows parsed from stdin (JSON or CSV)."""
+    if path != "-":
+        if not Path(path).is_file():
+            raise ChipError(
+                f"mintchip table: no such file {path!r}.",
+                fix_hint="Pass a .json (list of objects) or .csv file, or - for stdin.",
+            )
+        return path
+    text = _read("-")
+    if text.lstrip()[:1] in ("[", "{"):
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            raise ChipError(
+                f"mintchip table: stdin is not valid JSON (line {e.lineno}, column {e.colno}: "
+                f"{e.msg}).",
+                fix_hint='Pass a list of objects, e.g. [{"model": "a", "acc": 0.82}].',
+            ) from None
+    return list(csv.DictReader(text.splitlines()))
+
+
+def _cmd_table(args: argparse.Namespace) -> int:
+    try:
+        columns = table_columns(args.col, args.set)
+        t = mc.table(
+            _table_rows(args.file),
+            columns,
+            sort=args.sort,
+            descending=False if args.asc else True if args.desc else None,
+            limit=args.limit,
+            title=args.title,
+        )
+        if args.format == "json":
+            text = json.dumps(t.to_dict(), indent=2, ensure_ascii=args.ascii)
+        elif args.format == "md":
+            text = t.markdown()
+        elif args.format == "html":
+            text = t.html()
+        else:
+            text = t.text(ascii=args.ascii, color=args.format == "ansi")
+    except ChipError as e:
+        return _error(e, TABLE_EXAMPLE)
+    _out(text)
+    return _warn(t.warnings, args.strict)
+
+
+# --- schema ---------------------------------------------------------------------------------
+_SCHEMA_TYPES: dict[str, dict[str, Any]] = {
+    "number": {"type": "number"},
+    "int": {"type": "integer"},
+    "string": {"type": "string"},
+    "bool": {"type": "boolean"},
+    "numbers": {"type": "array", "items": {"type": ["number", "null"]}},
+    "range": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+    "strings": {"type": "array", "items": {"type": "string"}},
+    "values": {"type": "array", "items": {"type": ["boolean", "string", "number", "null"]}},
+}
+_PAIR = {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2}
+_SCHEMA_TYPES["mapping"] = {
+    "type": "object",
+    "additionalProperties": {"anyOf": [{"type": "number"}, _PAIR]},
+}
+
+DRAFT = "https://json-schema.org/draft/2020-12/schema"
+
+
+def kind_schema(kind: str) -> dict[str, Any]:
+    """JSON Schema for one kind's spec, ``{"chip": kind, **args}``."""
+    k = REGISTRY[kind]
+    props: dict[str, Any] = {"chip": {"const": kind}}
+    for p in k.params:
+        s = json.loads(json.dumps(_SCHEMA_TYPES[p.type]))
+        if p.choices:
+            s["enum"] = list(p.choices)
+        if p.default is not None:
+            s["default"] = p.default
+            if not p.required:  # null overrides the default, e.g. no reference line
+                t = s["type"]
+                s["type"] = [t, "null"] if isinstance(t, str) else [*t, "null"]
+        props[p.name] = {"description": p.help, **s}
     return {
-        "spark": mc.spark(
-            [1.84, 1.32, 0.96, 0.74, 0.61, 0.52, 0.46, 0.43, 0.42],
-            label="Val loss", band=(0.38, 0.48), reference=0.45, **kw,
-        ),
-        "ci": mc.ci(
-            0.08, (0.05, 0.11), inner_error=(0.07, 0.09),
-            error_label="95% CI, 5 seeds", reference=0.0, domain=ci_dom,
-            label="Retrieval lift", **kw,
-        ),
-        "dist": mc.dist(
-            [18.2, 19.1, 19.4, 19.8, 20.0, 20.3, 20.6, 21.1, 21.4, 22.0, 47.8],
-            label="Shard p95", unit="ms", reference=25.0, **kw,
-        ),
-        "bar": mc.bar(
-            0.82, total=1.0, baseline=0.74, target=0.80, bands=(0.60, 0.80),
-            label="Accuracy", **kw,
-        ),
-        "strip": mc.strip(
-            [True, True, True, "warn", True, False, True, "skip"],
-            labels=[f"seed_{i}" for i in range(8)], label="Repro seeds", **kw,
-        ),
-        "delta": mc.delta(0.74, 0.82, label="Accuracy", domain=delta_dom, **kw),
-        "waterfall": mc.waterfall(
-            {"Fine-tuning": 0.13, "Retrieval": 0.08, "Int4 quant": -0.02},
-            start=0.63, label="Ablation bridge", **kw,
-        ),
-        "scatter": mc.scatter(
-            xs, ys, highlight=9, names=[f"m{i}" for i in range(12)],
-            fit=True, label="Scaling law", x_label="Compute", y_label="Score", **kw,
-        ),
-        "share": mc.share(
-            {"Weights": 62, "KV cache": 28, "Activations": 10},
-            label="GPU memory", unit="GB", **kw,
-        ),
-        "funnel": mc.funnel(
-            {"Screened": 1200, "Eligible": 520, "Enrolled": 350, "Completed": 290},
-            label="Cohort", **kw,
-        ),
-        "ratio": mc.ratio(3, 10, label="Responder rate", **kw),
-        "gauge": mc.gauge(7.38, (7.35, 7.45), warn=(7.30, 7.50), label="Blood pH", **kw),
-        "quantiles": mc.quantiles(
-            samples_q, threshold=25.0, n_dots=10, unit="ms", label="Tail forecast", **kw,
-        ),
-        "evidence": mc.evidence(p=0.002, n=48, label="Drug vs placebo", **kw),
-        "timeline": mc.timeline(
-            {"fetch": 1.2, "solve": 4.8, "verify": 1.5}, unit="s", label="Agent turn", **kw,
-        ),
-        "rank": mc.rank(2, 18, label="MMLU-Pro", **kw),
-        "dual_spark": mc.dual_spark(
-            [1.40, 1.05, 0.80, 0.62, 0.51, 0.45, 0.42],
-            [1.42, 1.10, 0.88, 0.74, 0.66, 0.62, 0.61],
-            labels=("train", "val"), label="Loss gap", **kw,
-        ),
+        "title": f"mintchip {kind}",
+        "description": f"{k.question} Use for: {k.have[0].lower()}{k.have[1:]}.",
+        "type": "object",
+        "properties": props,
+        "required": ["chip", *(p.name for p in k.params if p.required)],
+        "additionalProperties": False,
+        "examples": [k.example_chip().to_dict()],
     }
 
 
+def schema(kind: str | None = None) -> dict[str, Any]:
+    """Draft 2020-12 JSON Schema for one kind, or a ``oneOf`` over all kinds on ``"chip"``."""
+    if kind is not None:
+        if kind not in REGISTRY:
+            close = difflib.get_close_matches(kind, sorted(REGISTRY), n=1)
+            hint = f"Did you mean {close[0]!r}? " if close else ""
+            raise ChipError(
+                f"mintchip schema: unknown chip {kind!r}.",
+                fix_hint=f"{hint}Chips: {', '.join(e['name'] for e in mc.CATALOG)}.",
+            )
+        return {"$schema": DRAFT, "$id": f"mintchip:{kind}", **kind_schema(kind)}
+    names = [e["name"] for e in mc.CATALOG]
+    return {
+        "$schema": DRAFT,
+        "$id": "mintchip:chip",
+        "title": "mintchip chip spec",
+        "description": 'One chip as {"chip": kind, ...arguments}; "chip" picks the kind.',
+        "type": "object",
+        "required": ["chip"],
+        "properties": {"chip": {"enum": names}},
+        "oneOf": [{"$ref": f"#/$defs/{n}"} for n in names],
+        "$defs": {n: kind_schema(n) for n in names},
+    }
+
+
+def _cmd_schema(args: argparse.Namespace) -> int:
+    try:
+        _out(json.dumps(schema(args.kind), indent=2, ensure_ascii=False))
+    except ChipError as e:
+        return _error(e)
+    return 0
+
+
+# --- catalog and guide ----------------------------------------------------------------------
 def _cmd_catalog(args: argparse.Namespace) -> int:
-    chips = _demo_chips()
-    if args.json:
-        payload = [
-            {
-                **entry,
-                "text": chips[entry["name"]].to_text(ascii_only=args.ascii),
-                "facts": chips[entry["name"]].facts,
-            }
-            for entry in mc.CATALOG
-        ]
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
-        return 0
-
-    print(f"mintchip {mc.__version__} — {len(mc.CATALOG)} word-sized visual chips\n")
+    rows = []
     for entry in mc.CATALOG:
-        name = entry["name"]
-        fam = entry["family"]
-        preview = chips[name].to_text(ascii_only=args.ascii)
-        print(f"  {fam:<11}  {name:<11}  {preview}")
-    return 0
-
-
-def _cmd_demo(args: argparse.Namespace) -> int:
-    chips = _demo_chips(style=args.style, palette=args.palette)
-    template = (
-        "Across 5 seeds, training settled into the target loss band at {spark}, lifting accuracy "
-        "to {bar} ({delta}) via {waterfall}, with retrieval contributing {ci} and compute scaling "
-        "at {scatter}.\n\n"
-        "VRAM splits {share}; cohort screening retained {funnel} with {ratio} responders, pH "
-        "stayed centered at {gauge}, tail breach risk is {quantiles}, and primary support rates "
-        "{evidence}. Shard latency clusters at {dist}, repro checks show {strip}, each turn took "
-        "{timeline}, placing our model {rank} while train/val curves end at {dual_spark}."
-    )
-    if args.html:
-        p1, p2 = template.split("\n\n")
-        html_doc = mc.document(
-            "mintchip — Word-Sized Visual Chips Demo",
-            [
-                mc.format_prose(p1, mode="html", compact=True, **chips),
-                mc.format_prose(p2, mode="html", compact=True, **chips),
-            ],
-            subtitle="Click any inline chip to inspect its computed facts.",
-            source=f"mintchip {mc.__version__} CLI demo",
-            style=args.style,
-            palette=args.palette,
-        )
-        out_path = Path(args.html)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(html_doc, encoding="utf-8")
-        print(f"Wrote interactive HTML demo to {out_path}")
+        example = mc.REGISTRY[entry["name"]].example_chip()
+        rows.append({**entry, "spec": example.to_dict(), "text": example.text(ascii=args.ascii)})
+    if args.json:
+        _out(json.dumps(rows, indent=2, ensure_ascii=args.ascii))
         return 0
-
-    print(mc.format_prose(template, mode="text", compact=True, ascii_only=args.ascii, **chips))
+    width = max(len(r["name"]) for r in rows)
+    lines = [f"mintchip {mc.__version__}: {len(rows)} chips", ""]
+    for r in rows:
+        lines.append(f"  {r['name']:<{width}}  {r['text']}")
+        lines.append(f"  {'':<{width}}  {r['have']}: {r['question']}")
+    _out("\n".join(lines))
     return 0
+
+
+def _cmd_guide(args: argparse.Namespace) -> int:
+    from . import guide
+
+    if args.write:
+        for path in guide.write(args.write):
+            _out(str(path))
+        return 0
+    _out(guide.agents_snippet() if args.agents else guide.guide_text())
+    return 0
+
+
+# --- parser ---------------------------------------------------------------------------------
+class _Help(argparse.RawDescriptionHelpFormatter):
+    def __init__(self, prog: str) -> None:
+        super().__init__(prog, max_help_position=26, width=100)
+
+
+def _pct(s: str) -> str:
+    return s.replace("%", "%%")
+
+
+def _param_help(p: Param) -> str:
+    text = p.help
+    if p.type in ("numbers", "range", "mapping", "values", "strings"):
+        text += f" Syntax: {SYNTAX[p.type][1]}."
+    if p.default is not None and p.type != "bool":
+        default = int(p.default) if isinstance(p.default, float) and p.default.is_integer() else (
+            p.default)  # fmt: skip
+        text += f" Default: {default}."
+    return _pct(text)
+
+
+def _kind_parser(sub: Any, kind: str) -> None:
+    k = REGISTRY[kind]
+    positional = [p for p in k.params if p.positional]
+    metas = [metavar(p) if p.required else f"[{metavar(p)}]" for p in positional]
+    c = k.example_chip()
+    epilog = (
+        f"example:\n  $ {example_call(kind)}\n  {c.text()}\n\n"
+        f"as a directive in `mintchip render`:\n  {example_call(kind, 'directive')}"
+    )
+    p = sub.add_parser(
+        kind,
+        help=_pct(k.question),
+        usage=_pct(f"mintchip {kind} {' '.join(metas)} [--option value …]"),
+        description=f"{k.question}\nUse it for: {k.have[0].lower()}{k.have[1:]}.",
+        epilog=epilog,
+        formatter_class=_Help,
+    )
+    for param in positional:
+        p.add_argument(param.name, metavar=metavar(param), nargs="?", help=_param_help(param))
+    for param in k.params:
+        if param.positional:
+            continue
+        flag = "--" + param.name.replace("_", "-")
+        if param.type == "bool":
+            p.add_argument(flag, action=argparse.BooleanOptionalAction, help=_param_help(param))
+        else:
+            p.add_argument(flag, metavar=SYNTAX[param.type][0], help=_param_help(param))
+    out = p.add_argument_group("output")
+    for param in OUTPUT:
+        flag = "--" + param.name
+        if param.type == "bool":
+            out.add_argument(flag, action="store_true", help=_pct(param.help))
+        else:
+            out.add_argument(flag, choices=param.choices, help=_pct(param.help))
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mintchip",
-        description="Zero-dependency word-sized visual chips for AI agents, scientists, and prose.",
+        description="Word-sized graphics for numbers: one chip, a sentence, or a table.",
+        epilog="Start with: mintchip guide",
+        formatter_class=_Help,
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
-    p_cat = sub.add_parser("catalog", help="List all 17 chips with live terminal previews.")
-    p_cat.add_argument("--ascii", action="store_true", help="Use pure ASCII glyphs.")
-    p_cat.add_argument("--json", action="store_true", help="Emit structured JSON catalog.")
-    p_cat.set_defaults(func=_cmd_catalog)
+    p = sub.add_parser(
+        "render",
+        help="Replace {{kind …}} directives in prose with chips.",
+        description=(
+            "Read prose from FILE (or stdin) and replace each {{kind tokens…}} directive with\n"
+            "its chip. Directives use the same tokens as the kind commands, with options as\n"
+            "name=value: {{spark 1.84 1.32 0.96 band=0.38:0.48}} is\n"
+            "`mintchip spark 1.84 1.32 0.96 --band 0.38:0.48`. A directive may also be a JSON\n"
+            'spec: {{ {"chip": "ci", "estimate": 0.08, "interval": [0.05, 0.11]} }}.\n'
+            "Text outside directives is copied unchanged; write \\{{ for a literal {{."
+        ),
+        formatter_class=_Help,
+    )
+    p.add_argument("file", nargs="?", default="-", metavar="FILE", help="Prose file; - is stdin.")
+    p.add_argument("--format", choices=("text", "ansi", "md", "html"), default="text",
+                   help="text (default), ansi, md (chips in code spans) or html (a full page).")  # fmt: skip
+    p.add_argument("--ascii", action="store_true", help="Pure ASCII chips.")
+    p.add_argument("--compact", action="store_true", help="Shorter chip values.")
+    p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
+    p.add_argument("--check", action="store_true", help="Also lint density to stderr.")
+    p.add_argument("--title", help="Page title for --format html.")
+    p.set_defaults(func=_cmd_render, _parser=p)
 
-    p_demo = sub.add_parser("demo", help="Print a prose demo or write an interactive HTML note.")
-    p_demo.add_argument("--ascii", action="store_true", help="Use pure ASCII glyphs.")
-    p_demo.add_argument("--html", type=str, default=None, help="Write standalone HTML to path.")
-    p_demo.add_argument("--style", type=str, default="default", choices=sorted(mc.THEMES))
-    p_demo.add_argument("--palette", type=str, default=None, choices=sorted(mc.PALETTES))
-    p_demo.set_defaults(func=_cmd_demo)
+    p = sub.add_parser(
+        "table",
+        help="Render rows from a JSON or CSV file as a table with shared scales.",
+        description=(
+            "Rows come from a .json file (a list of objects), a .csv file, or stdin (-).\n"
+            "Each --col KEY[:KIND[:HEADER]] adds a column in order; KIND is a chip kind or\n"
+            "text, inferred from the values if left out. A cell is a number, a list for the\n"
+            "kind's values (ci takes [estimate, low, high]) or an object of arguments. Every\n"
+            "chip column shares one scale. --set KEY.OPTION=VALUE applies an option to every\n"
+            "cell in a column."
+        ),
+        epilog=f"example:\n  $ {TABLE_EXAMPLE} --set acc.target=0.9",
+        formatter_class=_Help,
+    )
+    p.add_argument("file", metavar="FILE", help="A .json or .csv file; - is stdin.")
+    p.add_argument("--col", action="append", default=[], metavar="KEY[:KIND[:HEADER]]",
+                   help="Add a column; repeat in display order. No --col: every key.")  # fmt: skip
+    p.add_argument("--set", action="append", default=[], metavar="KEY.OPTION=VALUE",
+                   help="Apply a chip option to a whole column, e.g. acc.target=0.9.")  # fmt: skip
+    p.add_argument(
+        "--sort", metavar="KEY", help="Sort by this column (largest first; text A to Z)."
+    )
+    order = p.add_mutually_exclusive_group()
+    order.add_argument("--asc", action="store_true", help="Sort smallest first (A to Z for text).")
+    order.add_argument("--desc", action="store_true", help="Sort largest first (Z to A for text).")
+    p.add_argument("--limit", type=int, metavar="N", help="Keep the first N rows after sorting.")
+    p.add_argument("--title", help="A title above the table.")
+    p.add_argument("--format", choices=("text", "ansi", "md", "html", "json"), default="text",
+                   help="text (default), ansi, md, html or json.")  # fmt: skip
+    p.add_argument("--ascii", action="store_true", help="Pure ASCII.")
+    p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
+    p.set_defaults(func=_cmd_table, _parser=p)
 
+    p = sub.add_parser("guide", help="Print the agent guide (start here).", formatter_class=_Help)
+    p.add_argument("--agents", action="store_true",
+                   help="Print a short snippet to paste into AGENTS.md or CLAUDE.md.")  # fmt: skip
+    p.add_argument("--write", metavar="DIR",
+                   help="Write DIR/skills/mintchip/SKILL.md and DIR/llms.txt.")  # fmt: skip
+    p.set_defaults(func=_cmd_guide, _parser=p)
+
+    p = sub.add_parser("schema", help="Print JSON Schema for chip specs.", formatter_class=_Help)
+    p.add_argument("kind", nargs="?", metavar="KIND", help="One kind; default: all, as oneOf.")
+    p.set_defaults(func=_cmd_schema, _parser=p)
+
+    p = sub.add_parser("catalog", help="List every chip with its example rendered as text.")
+    p.add_argument("--ascii", action="store_true", help="Print pure ASCII.")
+    p.add_argument("--json", action="store_true", help="Print the catalog as JSON.")
+    p.set_defaults(func=_cmd_catalog, _parser=p)
+
+    for entry in mc.CATALOG:
+        _kind_parser(sub, entry["name"])
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _wants_help(tokens: Sequence[str]) -> bool:
+    for t in tokens:
+        if t == "--":
+            return False
+        if t in ("-h", "--help"):
+            return True
+    return False
+
+
+def _unknown_option(parser: argparse.ArgumentParser, extra: Sequence[str]) -> ChipError:
+    options = sorted({s for a in parser._actions for s in a.option_strings if s.startswith("--")})
+    bad = next((t for t in extra if t.startswith("-")), extra[0])
+    close = difflib.get_close_matches(bad.split("=")[0], options, n=1)
+    hint = f"Did you mean {close[0]}? " if close else ""
+    if not bad.startswith("-"):
+        return ChipError(
+            f"mintchip: unexpected argument {bad!r}.", fix_hint=f"See {parser.prog} -h."
+        )
+    return ChipError(
+        f"mintchip: unknown option {bad!r} for {parser.prog}.",
+        fix_hint=f"{hint}Options: {', '.join(options)}.",
+    )
+
+
+def _main(argv: list[str]) -> int:
+    if argv and argv[0] in REGISTRY and not _wants_help(argv[1:]):
+        return _cmd_kind(argv[0], argv[1:])
+    if argv and not argv[0].startswith("-") and argv[0] not in (*COMMANDS, *REGISTRY):
+        names = [*COMMANDS, *(e["name"] for e in mc.CATALOG)]
+        close = difflib.get_close_matches(argv[0], names, n=1)
+        hint = f"Did you mean {close[0]!r}? " if close else ""
+        return _error(
+            ChipError(
+                f"mintchip: unknown command {argv[0]!r}.",
+                fix_hint=f"{hint}Commands: {', '.join(names)}. Start with: mintchip guide",
+            )
+        )
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args, extra = parser.parse_known_args(argv)
+    if extra:
+        return _error(_unknown_option(args._parser, extra))
     return int(args.func(args))
 
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the command line; returns the exit status (0 ok, 1 warnings under --strict,
+    2 errors)."""
+    try:
+        return _main(list(sys.argv[1:] if argv is None else argv))
+    except ChipError as e:
+        return _error(e)
+    except SystemExit as e:  # argparse --help and usage errors
+        return e.code if isinstance(e.code, int) else (0 if e.code is None else 2)
+    except BrokenPipeError:
+        return 0
+
+
+def run(argv: Sequence[str], stdin: str | None = None) -> tuple[int, str, str]:
+    """Run ``mintchip argv`` in-process with ``stdin`` text; returns (status, stdout, stderr).
+    Used by the guide so its examples show real output."""
+    import contextlib
+    import io
+
+    out, err = io.StringIO(), io.StringIO()
+    old_in = sys.stdin
+    sys.stdin = io.StringIO(stdin or "")
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(argv)
+    finally:
+        sys.stdin = old_in
+    return code, out.getvalue(), err.getvalue()
+
+
+__all__ = ["build_parser", "call_text", "chip_output", "kind_schema", "main", "run", "schema"]
 
 if __name__ == "__main__":
     sys.exit(main())

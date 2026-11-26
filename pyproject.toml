@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mintchip"
-version = "0.1.0"
-description = "Zero-dependency word-sized visual chips (SVG, Unicode, ASCII, and interactive HTML) for AI agents, scientists, and prose."
+version = "0.2.0.dev0"
+description = "Word-sized graphics for the numbers in an agent's report: sparklines, intervals, before/after and pass/fail chips in text, Markdown or HTML, from one shell command."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
@@ -13,10 +13,13 @@ license-files = ["LICENSE"]
 authors = [{ name = "Ben Blaiszik" }]
 keywords = [
     "sparklines",
-    "micro-graphics",
+    "word-sized graphics",
+    "small multiples",
     "tufte",
     "agents",
-    "scientific-communication",
+    "llm",
+    "cli",
+    "reporting",
     "svg",
     "unicode",
     "data-visualization",
@@ -31,9 +34,6 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-mintfig = [
-    "mintfig>=0.2.0",
-]
 dev = [
     "pytest>=8.0",
     "ruff>=0.4",
@@ -49,7 +49,17 @@ mintchip = "mintchip.cli:main"
 packages = ["src/mintchip"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src", "tests", "gallery", "README.md", "LICENSE", "pyproject.toml"]
+include = [
+    "src",
+    "tests",
+    "gallery",
+    "scripts",
+    "skills",
+    "llms.txt",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
