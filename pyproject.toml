@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mintchip"
+version = "0.1.0"
+description = "Zero-dependency word-sized visual chips (SVG, Unicode, ASCII, and interactive HTML) for AI agents, scientists, and prose."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ben Blaiszik" }]
+keywords = [
+    "sparklines",
+    "micro-graphics",
+    "tufte",
+    "agents",
+    "scientific-communication",
+    "svg",
+    "unicode",
+    "data-visualization",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Visualization",
+]
+dependencies = []
+
+[project.optional-dependencies]
+mintfig = [
+    "mintfig>=0.2.0",
+]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+]
+
+[project.urls]
+Repository = "https://github.com/blaiszik/mintchip"
+
+[project.scripts]
+mintchip = "mintchip.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mintchip"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "gallery", "README.md", "LICENSE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = ["gallery/output"]
