@@ -13,7 +13,7 @@ from .spec import Chip, ChipError, sibling_domain
 
 __all__ = ["FORMATS", "format_prose", "lint", "shared_domains"]
 
-FORMATS = ("text", "markdown", "ansi", "html")
+FORMATS = ("text", "markdown", "md", "ansi", "html")
 _SLOT = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+|(?<=[.!?][\"')\]”’])\s+")
 _PARAGRAPH = re.compile(r"\n[ \t]*\n")
@@ -46,6 +46,7 @@ def format_prose(
             f"mintchip.format_prose: unknown format {format!r}.",
             fix_hint=f"Use one of: {', '.join(FORMATS)}.",
         )
+    fmt_name = "markdown" if format == "md" else format
     _check_chips("format_prose", chips)
     used = list(dict.fromkeys(_SLOT.findall(template)))
     missing = [n for n in used if n not in chips]
@@ -58,10 +59,10 @@ def format_prose(
     out = []
     for i, piece in enumerate(_SLOT.split(template)):
         if i % 2:
-            out.append(_render(chips[piece], domains.get(piece), format, ascii, compact, color,
+            out.append(_render(chips[piece], domains.get(piece), fmt_name, ascii, compact, color,
                                theme))  # fmt: skip
         else:
-            out.append(html.escape(piece, quote=False) if format == "html" else piece)
+            out.append(html.escape(piece, quote=False) if fmt_name == "html" else piece)
     return "".join(out)
 
 

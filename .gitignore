@@ -9,3 +9,10 @@ build/
 *.egg-info/
 .DS_Store
 .cache/
+.serena/
+.claude/
+.agents/
+.codex/
+.cursor/
+node_modules/
+prototypes/

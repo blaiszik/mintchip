@@ -311,6 +311,10 @@ def _el(tag: str, attrs: str, title: str | None) -> str:
     return f"<{tag} {attrs}/>"
 
 
+_LIGHT_TOKENS = "--mc-accent:#3B7DDD;--mc-good:#2A9152;--mc-bad:#DC4535;--mc-warn:#B87A00"
+_DARK_TOKENS = "--mc-accent:#5590E8;--mc-good:#31A05C;--mc-bad:#E85A48;--mc-warn:#C08000"
+
+
 def svg_root(
     c: Canvas,
     *,
@@ -323,10 +327,14 @@ def svg_root(
     data = json.dumps(spec, ensure_ascii=False, separators=(",", ":"))
     style = ""
     if standalone:
-        style = (
-            f"<style>svg{{color:{LIGHT_INK}}}"
-            f"@media (prefers-color-scheme:dark){{svg{{color:{DARK_INK}}}}}</style>"
-        )
+        if c.theme.auto:
+            style = (
+                f"<style>svg{{color:{LIGHT_INK};{_LIGHT_TOKENS}}}"
+                f"@media (prefers-color-scheme:dark){{svg{{color:{DARK_INK};{_DARK_TOKENS}}}}}"
+                "</style>"
+            )
+        else:
+            style = f"<style>svg{{color:{c.theme.ink}}}</style>"
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {_n(c.width)} 16" '
         f'width="{_n(c.width / 16)}em" height="1em" role="img" '

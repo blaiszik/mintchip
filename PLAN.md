@@ -1,6 +1,9 @@
 # mintchip presentation plan
 
-Written 2026-11-25 against `b16bb13` (v0.1.0, 17 chips, no outside users yet).
+> **Historical design notes (completed in v0.2.0).** Written 2026-11-25 against `b16bb13`
+> (v0.1.0, 17 chips) to guide the v0.2.0 rebuild. All eight work items below have shipped; see
+> [`CHANGELOG.md`](CHANGELOG.md) for current release history and [`gallery/README.md`](gallery/README.md)
+> for the generated chip reference.
 
 ## The goal
 
@@ -299,12 +302,13 @@ section 4 removes.
 
 ---
 
-# Status after implementation (2026-11-25)
+# Status after implementation (v0.2.0)
 
-Sections 1–8 are implemented as v0.2.0.dev0. 845 tests pass, ruff is clean, `import mintchip`
-takes about 12 ms with cached bytecode, and the generated files (README blocks, gallery,
-`skills/mintchip/SKILL.md`, `llms.txt`, golden text) match their generators. Nothing is
-committed.
+Sections 1–8 shipped in v0.2.0: tests pass, ruff is clean, `import mintchip` takes about 12 ms
+with cached bytecode, and the generated files (README blocks, gallery, `skills/mintchip/SKILL.md`,
+`llms.txt`, golden text) are enforced by CI. See [`CHANGELOG.md`](CHANGELOG.md) for subsequent
+v0.2.0 additions (`mintchip from`, `mintchip diff`, `mintchip skill`, `mintchip doctor`, static
+light/dark README SVGs, GitHub Pages gallery, and the `mintchip-diff` GitHub Action).
 
 ## The three tests
 

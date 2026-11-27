@@ -7,6 +7,8 @@ with ``.text()``, ``.svg()``, ``.html()`` or ``.markdown()``.
 from __future__ import annotations
 
 import importlib
+import sys
+import types
 from typing import Any
 
 from . import chips as _chips  # noqa: F401  (registers every chip kind found in chips/)
@@ -46,7 +48,21 @@ _LAZY = {
     "render": "directives",
     "css": "render.html",
     "document": "render.html",
+    "ingest": "ingest",
+    "diff_benchmarks": "diff",
+    "schema": "cli",
+    "install_skill": "skill",
 }
+
+
+class _MintchipModule(types.ModuleType):
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in _LAZY and isinstance(value, types.ModuleType):
+            return
+        super().__setattr__(name, value)
+
+
+sys.modules[__name__].__class__ = _MintchipModule
 
 
 def __getattr__(name: str) -> Any:
@@ -78,18 +94,22 @@ __all__ = [
     "contrast_ratio",
     "css",
     "delta",
+    "diff_benchmarks",
     "dist",
     "document",
     "format_prose",
     "from_dict",
     "funnel",
     "gauge",
+    "ingest",
+    "install_skill",
     "lint",
     "num",
     "rank",
     "ratio",
     "relative_luminance",
     "render",
+    "schema",
     "share",
     "shared_domain",
     "spark",

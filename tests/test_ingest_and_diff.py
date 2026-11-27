@@ -134,9 +134,10 @@ def test_ingest_git_diff_and_auto() -> None:
     chip = ingest(GIT_NUMSTAT, fmt="git-diff")
     assert chip.label == "Changed lines"
     code, out, err = run(["from", "git-diff"], GIT_NUMSTAT)
-    assert (code, err) == (0, "")
+    assert code == 0
     assert "54·31·12" in out
     assert "%" in out
+    assert err == "" or "half-height" in err
 
     code2, out2, _ = run(["from", "auto", "--ascii"], GIT_NUMSTAT)
     assert code2 == 0 and out2.isascii()
@@ -285,3 +286,217 @@ def test_diff_pytest_go_cargo_csv_and_generic_json(tmp_path: Path) -> None:
     j2.write_text(json.dumps({"step_a": 90.0, "step_b": 180.0}), encoding="utf-8")
     code, out, err = run(["diff", str(j1), str(j2), "--fail-on-regression", "5"])
     assert (code, err) == (0, "") and "2 improved, 0 regressed" in out
+
+
+def test_diff_direction_ci_noise_mixed_units_and_missing_warnings(tmp_path: Path) -> None:
+    # 1. Generic JSON accuracy/throughput infers higher_is_better from metric name
+    a1, a2 = tmp_path / "a1.json", tmp_path / "a2.json"
+    a1.write_text(json.dumps({"accuracy": 0.80}), encoding="utf-8")
+    a2.write_text(json.dumps({"accuracy": 0.85}), encoding="utf-8")
+    code, out, err = run(["diff", str(a1), str(a2), "--fail-on-regression", "1"])
+    assert (code, err) == (0, "") and "1 improved, 0 regressed" in out
+
+    m1, m2 = tmp_path / "m1.json", tmp_path / "m2.json"
+    m1.write_text(json.dumps([{"metric": "accuracy", "value": 0.80}]), encoding="utf-8")
+    m2.write_text(json.dumps([{"metric": "accuracy", "value": 0.85}]), encoding="utf-8")
+    code, out, err = run(["diff", str(m1), str(m2), "--fail-on-regression", "1"])
+    assert (code, err) == (0, "") and "1 improved, 0 regressed" in out
+
+    # 2. CI crossing 0 is classified as noise (unchanged), does not fail gate unless --no-ci-gate
+    n1, n2 = tmp_path / "n1.json", tmp_path / "n2.json"
+    n1.write_text(
+        json.dumps([{"name": "noisy", "mean": 10.0, "stddev": 3.0, "n": 5, "unit": "ms"}]),
+        encoding="utf-8",
+    )
+    n2.write_text(
+        json.dumps([{"name": "noisy", "mean": 11.0, "stddev": 3.0, "n": 5, "unit": "ms"}]),
+        encoding="utf-8",
+    )
+    code, out, err = run(["diff", str(n1), str(n2), "--fail-on-regression", "5"])
+    assert (code, err) == (0, "") and "0 regressed, 1 unchanged" in out
+
+    code_ng, out_ng, _ = run(
+        ["diff", str(n1), str(n2), "--fail-on-regression", "5", "--no-ci-gate"]
+    )
+    assert code_ng == 1 and "1 regressed" in out_ng
+
+    # 3. Mixed units / >100x unitless span disables shared delta/ci scale
+    mix1, mix2 = tmp_path / "mix1.json", tmp_path / "mix2.json"
+    mix1.write_text(
+        json.dumps([
+            {"name": "accuracy", "value": 0.80, "unit": "%"},
+            {"name": "latency", "value": 25.0, "unit": "ms"},
+        ]),
+        encoding="utf-8",
+    )
+    mix2.write_text(
+        json.dumps([
+            {"name": "accuracy", "value": 0.82, "unit": "%"},
+            {"name": "latency", "value": 20.0, "unit": "ms"},
+        ]),
+        encoding="utf-8",
+    )
+    from mintchip.diff import diff_benchmarks, load_benchmark_entries
+
+    res_mix = diff_benchmarks(
+        load_benchmark_entries(mix1.read_text()),
+        load_benchmark_entries(mix2.read_text()),
+    )
+    assert res_mix.table.columns[3].share is False
+
+    wide1 = load_benchmark_entries(json.dumps({"accuracy": 0.80, "throughput": 5000.0}))
+    wide2 = load_benchmark_entries(json.dumps({"accuracy": 0.85, "throughput": 5500.0}))
+    res_wide = diff_benchmarks(wide1, wide2)
+    assert res_wide.table.columns[3].share is False
+
+    # 4. Missing benchmarks in BASE emit warning in DiffResult.warnings and on stderr
+    b1, b2 = tmp_path / "b1.json", tmp_path / "b2.json"
+    b1.write_text(json.dumps({"kept": 10.0, "dropped_bench": 20.0}), encoding="utf-8")
+    b2.write_text(json.dumps({"kept": 9.0}), encoding="utf-8")
+    code, out, err = run(["diff", str(b1), str(b2)])
+    assert code == 0 and "missing from HEAD" in err and "dropped_bench" in err
+
+    # 5. Diff full HTML vs --fragment, -o, and --format md --ascii
+    html_out = tmp_path / "diff.html"
+    code, out, err = run(["diff", str(a1), str(a2), "--format", "html", "-o", str(html_out)])
+    assert (code, out, err) == (0, "", "")
+    h = html_out.read_text(encoding="utf-8")
+    assert h.startswith("<!doctype html>") and '<meta charset="utf-8">' in h and "mc-takeaway" in h
+
+    code, frag, err = run(["diff", str(a1), str(a2), "--format", "html", "--fragment"])
+    assert (code, err) == (0, "") and frag.startswith("<table") and "<!doctype" not in frag.lower()
+
+    code, md_a, err = run(["diff", str(a1), str(a2), "--format", "markdown", "--ascii"])
+    assert (code, err) == (0, "") and md_a.isascii()
+
+
+def test_ingest_github_actions_k6_esbuild_chrome_trace(tmp_path: Path) -> None:
+    # 1. github-actions: single job with steps -> timeline, multi-job with steps -> table
+    gha_single = json.dumps({
+        "jobs": [
+            {
+                "name": "ci",
+                "conclusion": "success",
+                "started_at": "2026-01-15T10:00:00Z",
+                "completed_at": "2026-01-15T10:01:00Z",
+                "steps": [
+                    {"name": "Checkout", "started_at": "2026-01-15T10:00:00Z", "completed_at": "2026-01-15T10:00:08Z"},
+                    {"name": "Test", "started_at": "2026-01-15T10:00:08Z", "completed_at": "2026-01-15T10:00:50Z"},
+                    {"name": "Upload", "started_at": "2026-01-15T10:00:50Z", "completed_at": "2026-01-15T10:01:00Z"},
+                ],
+            }
+        ]
+    })
+    assert detect_format(gha_single) == "github-actions"
+    chip = ingest(gha_single, fmt="auto")
+    assert chip.kind == "timeline" and "Test" in chip.text()
+
+    gha_multi = json.dumps({
+        "jobs": [
+            {
+                "name": "lint",
+                "conclusion": "success",
+                "startedAt": "2026-01-15T10:00:00Z",
+                "completedAt": "2026-01-15T10:00:20Z",
+                "steps": [
+                    {"name": "Checkout", "startedAt": "2026-01-15T10:00:00Z", "completedAt": "2026-01-15T10:00:05Z"},
+                    {"name": "Ruff", "startedAt": "2026-01-15T10:00:05Z", "completedAt": "2026-01-15T10:00:20Z"},
+                ],
+            },
+            {
+                "name": "test",
+                "conclusion": "success",
+                "startedAt": "2026-01-15T10:00:00Z",
+                "completedAt": "2026-01-15T10:00:45Z",
+                "steps": [
+                    {"name": "Checkout", "startedAt": "2026-01-15T10:00:00Z", "completedAt": "2026-01-15T10:00:05Z"},
+                    {"name": "Pytest", "startedAt": "2026-01-15T10:00:05Z", "completedAt": "2026-01-15T10:00:45Z"},
+                ],
+            },
+        ]
+    })
+    code, out, err = run(["from", "auto"], gha_multi)
+    assert (code, err) == (0, "") and "lint" in out and "test" in out
+
+    # 2. k6 summary JSON (single -> dist, multi -> table)
+    k6_single = json.dumps({
+        "metrics": {
+            "http_req_duration": {
+                "values": {"avg": 24.5, "min": 8.1, "med": 21.3, "max": 142.0, "p(90)": 41.2, "p(95)": 56.8}
+            },
+            "http_reqs": {"count": 1200, "rate": 40.0},
+        }
+    })
+    assert detect_format(k6_single) == "k6"
+    k6_chip = ingest(k6_single, fmt="auto")
+    assert k6_chip.kind == "dist" and "21.3 ms" in k6_chip.text()
+
+    k6_multi = json.dumps({
+        "metrics": {
+            "http_req_duration": {"avg": 24.5, "min": 8.1, "med": 21.3, "max": 142.0, "p(90)": 41.2, "p(95)": 56.8},
+            "http_req_waiting": {"avg": 22.1, "min": 7.5, "med": 19.8, "max": 135.0, "p(90)": 38.0, "p(95)": 52.4},
+        }
+    })
+    code, out, err = run(["from", "k6"], k6_multi)
+    assert code == 0 and "http_req_duration" in out and "http_req_waiting" in out
+
+    # 3. esbuild metafile JSON (single -> share, multi -> table)
+    esb_single = json.dumps({
+        "inputs": {"src/app.ts": {"bytes": 14200}, "node_modules/react/index.js": {"bytes": 42000}},
+        "outputs": {
+            "dist/app.js": {
+                "bytes": 58400,
+                "inputs": {
+                    "src/app.ts": {"bytesInOutput": 12400},
+                    "node_modules/react/index.js": {"bytesInOutput": 41000},
+                    "node_modules/@scope/ui/btn.js": {"bytesInOutput": 5000},
+                },
+            },
+            "dist/app.js.map": {"bytes": 90000, "inputs": {}},
+        },
+    })
+    assert detect_format(esb_single) == "esbuild"
+    esb_chip = ingest(esb_single, fmt="auto")
+    assert esb_chip.kind == "share" and "react" in esb_chip.alt and "KB" in esb_chip.facts[0]
+
+    esb_multi = json.dumps({
+        "inputs": {},
+        "outputs": {
+            "dist/app.js": {"bytes": 50000, "inputs": {"src/a.ts": {"bytesInOutput": 30000}, "node_modules/pkg/i.js": {"bytesInOutput": 20000}}},
+            "dist/worker.js": {"bytes": 25000, "inputs": {"src/w.ts": {"bytesInOutput": 25000}}},
+        },
+    })
+    code, out, err = run(["from", "esbuild", "--format", "md", "--ascii"], esb_multi)
+    assert (code, err) == (0, "") and out.isascii() and "dist/app.js" in out and "dist/worker.js" in out
+
+    # 4. chrome-trace JSON (object form X events -> timeline, array form repeated B/E -> table)
+    ct_obj = json.dumps({
+        "traceEvents": [
+            {"name": "fetch", "ph": "X", "ts": 1000, "dur": 1200, "pid": 1, "tid": 1},
+            {"name": "parse", "ph": "X", "ts": 2200, "dur": 4800, "pid": 1, "tid": 1},
+            {"name": "render", "ph": "X", "ts": 7000, "dur": 1500, "pid": 1, "tid": 1},
+        ]
+    })
+    assert detect_format(ct_obj) == "chrome-trace"
+    ct_chip = ingest(ct_obj, fmt="auto")
+    assert ct_chip.kind == "timeline" and "parse" in ct_chip.text()
+
+    ct_arr = json.dumps([
+        {"name": "decode", "ph": "B", "ts": 1000, "pid": 1, "tid": 1},
+        {"name": "decode", "ph": "E", "ts": 2200, "pid": 1, "tid": 1},
+        {"name": "decode", "ph": "B", "ts": 3000, "pid": 1, "tid": 1},
+        {"name": "decode", "ph": "E", "ts": 4500, "pid": 1, "tid": 1},
+        {"name": "render", "ph": "X", "ts": 5000, "dur": 2000, "pid": 1, "tid": 1},
+    ])
+    assert detect_format(ct_arr) == "chrome-trace"
+    code, out, err = run(["from", "auto"], ct_arr)
+    assert (code, err) == (0, "") and "decode" in out and "Calls" in out
+
+    # 5. `from` full HTML vs --fragment and -o
+    html_file = tmp_path / "from.html"
+    code, out, err = run(["from", "chrome-trace", "--format", "html", "-o", str(html_file)], ct_obj)
+    assert (code, out, err) == (0, "", "")
+    txt = html_file.read_text(encoding="utf-8")
+    assert txt.startswith("<!doctype html>") and '<meta charset="utf-8">' in txt
+    code, frag, err = run(["from", "chrome-trace", "--format", "html", "--fragment"], ct_obj)
+    assert (code, err) == (0, "") and "<!doctype" not in frag.lower() and "mc-timeline" in frag

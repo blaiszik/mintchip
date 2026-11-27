@@ -1,6 +1,6 @@
 # Mintchip Skill Trigger Evaluation Report
 
-**Status:** `PASS`
+**Status:** `PASS` | **Mode:** `offline_rubric`
 
 | Metric | Value | Gate |
 |---|---:|---:|

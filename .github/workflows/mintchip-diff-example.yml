@@ -1,0 +1,68 @@
+name: "Example: mintchip diff"
+
+# Manual-only example workflow showing how to drop `.github/actions/mintchip-diff`
+# into a repository. Copy this file and add `pull_request:` under `on:` in your own repo.
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Baseline benchmark file path (JSON, CSV, hyperfine, pytest/go/cargo bench)"
+        required: true
+        default: "bench/main.json"
+      head:
+        description: "Candidate benchmark file path"
+        required: true
+        default: "bench/pr.json"
+      fail_on_regression:
+        description: "Fail when any benchmark regresses by more than this percent (leave empty to report only)"
+        required: false
+        default: "5"
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark-diff:
+    name: Compare benchmarks with mintchip
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run mintchip diff
+        id: diff
+        uses: ./.github/actions/mintchip-diff
+        with:
+          base: ${{ inputs.base }}
+          head: ${{ inputs.head }}
+          fail-on-regression: ${{ inputs.fail_on_regression }}
+          title: "Benchmark diff vs main"
+          write-summary: "true"
+
+      - name: Print diff metadata
+        if: always()
+        shell: bash
+        env:
+          MINTCHIP_PASSED: ${{ steps.diff.outputs.passed }}
+          MINTCHIP_REGRESSIONS: ${{ steps.diff.outputs.regression-count }}
+          MINTCHIP_TAKEAWAY: ${{ steps.diff.outputs.takeaway }}
+        run: |
+          echo "passed=$MINTCHIP_PASSED regressions=$MINTCHIP_REGRESSIONS"
+          echo "takeaway=$MINTCHIP_TAKEAWAY"
+
+      # Optional: to post the Markdown table as a PR comment in your own repo,
+      # grant `pull-requests: write` above and enable this step:
+      #
+      # - name: Post PR comment
+      #   if: always() && github.event_name == 'pull_request'
+      #   uses: actions/github-script@v7
+      #   env:
+      #     MINTCHIP_REPORT: ${{ steps.diff.outputs.report-markdown }}
+      #   with:
+      #     script: |
+      #       await github.rest.issues.createComment({
+      #         owner: context.repo.owner,
+      #         repo: context.repo.repo,
+      #         issue_number: context.issue.number,
+      #         body: process.env.MINTCHIP_REPORT,
+      #       });

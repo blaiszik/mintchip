@@ -21,7 +21,8 @@ from ..render.text_base import GAP, TRACK, TextOptions, TextOut, largest_remaind
 from ..spec import Built, Chip, ChipError, Param, chip, svg_renderer, text_renderer
 from .share import SMALL
 
-CELLS = 10  # text cells for the whole wall clock
+CELLS = 12  # total text-bar width (block/track cells + separator gaps)
+MAX_PHASES = 10  # maximum phases shown in one timeline
 MAX_LANES = 3  # parallel phases the SVG can stack and still read at 1x
 LANES = {  # SVG bar (top, height) per lane, by lane count
     1: ((4.0, 8.0),),
@@ -54,9 +55,9 @@ HINT = 'Pass durations in order, {"fetch": 1.2, "solve": 4.8}, or spans, {"fetch
 def timeline(stages, *, label=None, unit="s") -> Built:
     if not stages:
         raise ChipError("needs at least 1 phase; got none.", fix_hint=HINT)
-    if len(stages) > CELLS:
+    if len(stages) > MAX_PHASES:
         raise ChipError(
-            f"shows at most {CELLS} phases; got {len(stages)}.",
+            f"shows at most {MAX_PHASES} phases; got {len(stages)}.",
             fix_hint="Group short phases together, e.g. 'setup' for the first few.",
         )
     kinds = {isinstance(v, tuple) for v in stages.values()}
@@ -89,7 +90,7 @@ def timeline(stages, *, label=None, unit="s") -> Built:
             f"{peak} phases run at once; a timeline stacks at most {MAX_LANES}.",
             fix_hint="Group parallel phases into one, or show each group as its own timeline.",
         )
-    text, small = _text_pieces(pieces, len(spans))
+    text, small, use_gaps, block_budget = _text_pieces(pieces, len(spans))
 
     warnings = []
     if overlap > 0:
@@ -101,7 +102,7 @@ def timeline(stages, *, label=None, unit="s") -> Built:
     for i in small:
         warnings.append(
             f"phase {names[i]!r} ({fmt.num(durs[i], unit=unit)}, {fmt.pct(durs[i] / wall)}) is "
-            f"under one text cell of {CELLS}; it is drawn as one half-height cell ({SMALL}), "
+            f"under one text cell of {block_budget}; it is drawn as one half-height cell ({SMALL}), "
             "and as a half-height bar in SVG if it is narrower than the minimum."
         )
 
@@ -128,6 +129,7 @@ def timeline(stages, *, label=None, unit="s") -> Built:
             "idle": idle,
             "overlap": overlap,
             "text": text,
+            "use_gaps": use_gaps,
         },
         facts=facts,
         warnings=warnings,
@@ -169,14 +171,9 @@ def _lanes(spans: list[tuple[float, float]]) -> list[int]:
     return lanes
 
 
-def _text_pieces(pieces: list[list], phases: int) -> tuple[list[list], list[int]]:
-    """``[owner, cells, small]`` runs for the text line, and the phases drawn small.
-
-    Cells go to pieces by largest remainder; a phase left with no cell at all gets one
-    half-height cell, taken from the piece with the most cells. Pieces left with none (idle
-    or a phase's sliver) are dropped and their neighbours merged."""
+def _allocate_pieces(pieces: list[list], phases: int, budget: int) -> tuple[list[list], list[int]]:
     owners = [o for o, _ in pieces]
-    cells = largest_remainder([d for _, d in pieces], CELLS)
+    cells = largest_remainder([d for _, d in pieces], budget)
     flag = [False] * len(pieces)
 
     def spare(j: int) -> bool:  # can piece j give up a cell without hiding its phase?
@@ -191,7 +188,7 @@ def _text_pieces(pieces: list[list], phases: int) -> tuple[list[list], list[int]
 
     has = {o for o, n in zip(owners, cells, strict=True) if n and o is not None}
     small = [i for i in range(phases) if i not in has]
-    for i in small:  # at most CELLS phases, so a spare cell always exists
+    for i in small:
         k = max((j for j, o in enumerate(owners) if o == i), key=lambda j: pieces[j][1])
         donor = max((j for j in range(len(cells)) if spare(j)), key=lambda j: (cells[j], -j))
         cells[donor] -= 1
@@ -207,6 +204,29 @@ def _text_pieces(pieces: list[list], phases: int) -> tuple[list[list], list[int]
     return out, small
 
 
+def _count_gaps(runs: list[list]) -> int:
+    return sum(1 for a, b in itertools.pairwise(runs) if a[0] is not None and b[0] is not None)
+
+
+def _text_pieces(pieces: list[list], phases: int) -> tuple[list[list], list[int], bool, int]:
+    """``[owner, cells, small]`` runs for the text line, small phases, whether gaps are drawn,
+    and the block-cell budget. Separator gaps are budgeted inside ``CELLS`` so every timeline
+    row has identical total bar width regardless of phase count."""
+    n_gaps = _count_gaps(pieces)
+    for _ in range(3):
+        if phases + n_gaps > CELLS:
+            out, small = _allocate_pieces(pieces, phases, CELLS)
+            return out, small, False, CELLS
+        budget = CELLS - n_gaps
+        out, small = _allocate_pieces(pieces, phases, budget)
+        actual_gaps = _count_gaps(out)
+        if actual_gaps == n_gaps:
+            return out, small, True, budget
+        n_gaps = actual_gaps
+    out, small = _allocate_pieces(pieces, phases, CELLS)
+    return out, small, False, CELLS
+
+
 # --- text -----------------------------------------------------------------------------------
 @text_renderer("timeline")
 def _text(chip: Chip, o: TextOptions) -> TextOut:
@@ -219,12 +239,13 @@ def _text(chip: Chip, o: TextOptions) -> TextOut:
         total = fmt.num(s["total"], unit=chip.unit)
     value = total if o.compact else f"{total} ({s['names'][s['longest']]} {fmt.pct(s['share'])})"
     glyph: list[tuple[str, str | None]] = []
+    use_gaps = s.get("use_gaps", True)
     prev = None
     for owner, n, small in s["text"]:
         if owner is None:
             glyph.append((TRACK * n, "context"))
         else:
-            if prev is not None:
+            if use_gaps and prev is not None:
                 glyph.append((GAP, None))
             role = "accent" if owner == s["longest"] else None
             glyph.append((SMALL if small else "█" * n, role))

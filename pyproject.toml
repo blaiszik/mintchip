@@ -40,7 +40,11 @@ dev = [
 ]
 
 [project.urls]
+Homepage = "https://github.com/blaiszik/mintchip"
 Repository = "https://github.com/blaiszik/mintchip"
+Documentation = "https://blaiszik.github.io/mintchip/"
+Issues = "https://github.com/blaiszik/mintchip/issues"
+Changelog = "https://github.com/blaiszik/mintchip/blob/main/CHANGELOG.md"
 
 [project.scripts]
 mintchip = "mintchip.cli:main"
@@ -53,13 +57,23 @@ include = [
     "src",
     "tests",
     "evals",
-    "gallery",
+    "gallery/README.md",
+    "gallery/build_gallery.py",
     "scripts",
     "skills",
     "llms.txt",
+    "CHANGELOG.md",
     "README.md",
     "LICENSE",
     "pyproject.toml",
+]
+exclude = [
+    "gallery/output",
+    "gallery/output/**",
+    "prototypes",
+    "prototypes/**",
+    "promo",
+    "promo/**",
 ]
 
 [tool.pytest.ini_options]
@@ -68,4 +82,4 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-extend-exclude = ["gallery/output"]
+extend-exclude = ["gallery/output", "prototypes"]

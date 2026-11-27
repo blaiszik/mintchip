@@ -1,8 +1,12 @@
-"""20-prompt offline skill trigger evaluation for mintchip.
+"""20-prompt skill trigger evaluation for mintchip.
 
 Evaluates ``guide.SKILL_DESCRIPTION`` / generated ``SKILL.md`` and ``guide.agents_snippet()``
-against 20 realistic prompts (10 positive, 10 negative, none naming ``mintchip``) with zero
-network calls and zero external dependencies.
+against 20 realistic prompts (10 positive, 10 negative, none naming ``mintchip``).
+
+Modes:
+- **Offline deterministic rubric (default):** zero network calls and zero external dependencies.
+- **Live agent adapter (``--live``):** invokes ``claude -p``, ``codex exec``, or ``gemini -p``
+  with the skill description context to measure real LLM routing.
 
 Exit codes:
 - ``0``: passed exit gates (recall >= 90%, false-trigger rate == 0%)
@@ -14,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -276,18 +281,106 @@ def score_prompt_offline(prompt_item: dict[str, Any], spec: SkillTriggerSpec) ->
     )
 
 
+def _live_routing_prompt(user_prompt: str, spec: SkillTriggerSpec) -> str:
+    """Build a concise routing prompt for --live evaluation via claude/codex/gemini CLIs."""
+    return (
+        "You are deciding whether to invoke an installed coding-agent skill for a user request.\n\n"
+        f"Available skill:\n- name: {spec.name}\n- description: {spec.description}\n\n"
+        f"User request:\n{user_prompt}\n\n"
+        'Respond with ONLY a single JSON object: {"trigger": true|false, "reason": "<one sentence>"}'
+    )
+
+
+def score_prompt_live(
+    prompt_item: dict[str, Any],
+    spec: SkillTriggerSpec,
+    *,
+    agent: str,
+    model: str | None = None,
+    timeout: int = 45,
+) -> PromptResult:
+    """Run a live CLI check against claude -p, codex exec, or gemini -p."""
+    routing_prompt = _live_routing_prompt(str(prompt_item["prompt"]), spec)
+    if agent == "claude":
+        cmd = ["claude", "-p", routing_prompt]
+        if model:
+            cmd.extend(["--model", model])
+    elif agent == "codex":
+        cmd = ["codex", "exec", routing_prompt]
+        if model:
+            cmd.extend(["-m", model])
+    elif agent == "gemini":
+        cmd = ["gemini", "-p", routing_prompt]
+        if model:
+            cmd.extend(["-m", model])
+    else:
+        raise ValueError(f"Unsupported live agent: {agent!r} (choose claude, codex, or gemini)")
+
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    raw = (proc.stdout or "").strip()
+    predicted = False
+    reason = f"CLI exit={proc.returncode}"
+    json_match = re.search(r"\{.*?\}", raw, flags=re.DOTALL)
+    if json_match:
+        try:
+            parsed = json.loads(json_match.group(0))
+            predicted = bool(parsed.get("trigger", False))
+            reason = str(parsed.get("reason", raw[:160]))
+        except json.JSONDecodeError:
+            predicted = "true" in raw.lower()
+            reason = f"Unparsed output: {raw[:160]}"
+    elif raw:
+        predicted = bool(re.search(r"\b(true|yes|mintchip)\b", raw.lower()))
+        reason = f"Plain output: {raw[:160]}"
+
+    should = bool(prompt_item["should_trigger"])
+    return PromptResult(
+        id=str(prompt_item["id"]),
+        category=str(prompt_item["category"]),
+        should_trigger=should,
+        predicted_trigger=predicted,
+        correct=(predicted == should),
+        matched_rule=f"live_{agent}",
+        positive_signals=["live_yes"] if predicted else [],
+        negative_signals=["live_no"] if not predicted else [],
+        reason=reason,
+        prompt=str(prompt_item["prompt"]),
+    )
+
+
 def evaluate_prompts(
     prompts_data: dict[str, Any],
     skill_md: str,
     snippet_md: str,
+    *,
+    live: bool = False,
+    agent: str = "claude",
+    model: str | None = None,
+    limit: int | None = None,
+    timeout: int = 45,
 ) -> dict[str, Any]:
-    """Run the full 20-prompt offline evaluation and check exit gates."""
+    """Run the 20-prompt evaluation (offline or --live) and check exit gates."""
     spec = extract_skill_spec(skill_md, snippet_md)
     gates = prompts_data.get("exit_gates", {})
     min_recall = float(gates.get("min_recall", 0.90))
     max_ftr = float(gates.get("max_false_trigger_rate", 0.0))
 
-    results = [score_prompt_offline(item, spec) for item in prompts_data["prompts"]]
+    prompts = list(prompts_data["prompts"])
+    if limit is not None:
+        prompts = prompts[:limit]
+
+    results = [
+        score_prompt_live(item, spec, agent=agent, model=model, timeout=timeout)
+        if live
+        else score_prompt_offline(item, spec)
+        for item in prompts
+    ]
     tp = sum(1 for r in results if r.should_trigger and r.predicted_trigger)
     fn = sum(1 for r in results if r.should_trigger and not r.predicted_trigger)
     fp = sum(1 for r in results if not r.should_trigger and r.predicted_trigger)
@@ -303,6 +396,7 @@ def evaluate_prompts(
     passed = recall >= min_recall and false_trigger_rate <= max_ftr
 
     return {
+        "mode": f"live:{agent}" if live else "offline_rubric",
         "passed": passed,
         "gates": {
             "min_recall": min_recall,
@@ -338,10 +432,11 @@ def render_markdown_report(report: dict[str, Any]) -> str:
     m = report["metrics"]
     g = report["gates"]
     status = "PASS" if report["passed"] else "FAIL"
+    mode = report.get("mode", "offline_rubric")
     lines = [
         "# Mintchip Skill Trigger Evaluation Report",
         "",
-        f"**Status:** `{status}`",
+        f"**Status:** `{status}` | **Mode:** `{mode}`",
         "",
         "| Metric | Value | Gate |",
         "|---|---:|---:|",
@@ -366,24 +461,47 @@ def render_markdown_report(report: dict[str, Any]) -> str:
 def main(argv: list[str] | None = None) -> int:
     from mintchip import guide
 
-    parser = argparse.ArgumentParser(description="Run the 20-prompt offline mintchip skill trigger eval.")
+    parser = argparse.ArgumentParser(description="Run the 20-prompt mintchip skill trigger eval.")
     parser.add_argument("--prompts", type=Path, default=DEFAULT_PROMPTS)
     parser.add_argument("--skill", type=Path, default=None, help="Optional SKILL.md path (defaults to guide.skill_text()).")
     parser.add_argument("--report", type=Path, default=None, help="Optional path to write Markdown report.")
+    parser.add_argument("--json", action="store_true", dest="as_json", help="Print JSON summary to stdout.")
+    parser.add_argument("--live", action="store_true", help="Run live routing via an installed agent CLI.")
+    parser.add_argument(
+        "--agent",
+        choices=("claude", "codex", "gemini"),
+        default="claude",
+        help="Agent CLI to invoke in --live mode (default: claude).",
+    )
+    parser.add_argument("--model", default=None, help="Optional model override for --live mode.")
+    parser.add_argument("--limit", type=int, default=None, help="Evaluate only the first N prompts.")
+    parser.add_argument("--timeout", type=int, default=45, help="Per-prompt timeout in seconds (--live).")
     args = parser.parse_args(argv)
 
     prompts_data = json.loads(args.prompts.read_text(encoding="utf-8"))
     skill_md = args.skill.read_text(encoding="utf-8") if args.skill else guide.skill_text()
     snippet_md = guide.agents_snippet()
 
-    report = evaluate_prompts(prompts_data, skill_md, snippet_md)
-    m = report["metrics"]
-    tag = "PASS" if report["passed"] else "FAIL"
-    print(
-        f"[{tag}] recall={m['recall']:.1%} ({m['tp']}/{m['positives']}) "
-        f"false_trigger_rate={m['false_trigger_rate']:.1%} ({m['fp']}/{m['negatives']}) "
-        f"precision={m['precision']:.1%}"
+    report = evaluate_prompts(
+        prompts_data,
+        skill_md,
+        snippet_md,
+        live=args.live,
+        agent=args.agent,
+        model=args.model,
+        limit=args.limit,
+        timeout=args.timeout,
     )
+    if args.as_json:
+        print(json.dumps(report, indent=2))
+    else:
+        m = report["metrics"]
+        tag = "PASS" if report["passed"] else "FAIL"
+        print(
+            f"[{tag}] mode={report['mode']} recall={m['recall']:.1%} ({m['tp']}/{m['positives']}) "
+            f"false_trigger_rate={m['false_trigger_rate']:.1%} ({m['fp']}/{m['negatives']}) "
+            f"precision={m['precision']:.1%}"
+        )
     if args.report is not None:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(render_markdown_report(report), encoding="utf-8")

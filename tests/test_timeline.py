@@ -21,7 +21,8 @@ def test_example_reads_as_target() -> None:
 
 def test_idle_time_is_empty_track() -> None:
     c = mc.timeline({"fetch": (0, 1), "solve": (3, 7), "write": (8, 10)})
-    assert c.text() == "10 s (solve 40%) █··████·██"
+    assert c.text() == "10 s (solve 40%) █···█████·██"
+    assert len(c.text(value=False)) == CELLS
     assert "idle 3 s (30%)" in c.facts
     assert c.svg().count("stroke-opacity:0.6") == 2, "two idle stretches as context track"
 
@@ -41,16 +42,31 @@ def test_overlap_is_stacked_in_svg_and_announced_in_text() -> None:
 def test_phase_under_one_cell_stays_visible() -> None:
     c = mc.timeline({"a": 10, "b": 0.05, "c": 3})
     assert c.text(value=False) == "███████▏▄▏██"
-    assert sum(n for _, n, _ in c.stats["text"]) == CELLS
+    assert len(c.text(value=False)) == CELLS
     assert any("'b'" in w and "half-height" in w for w in c.warnings)
     assert 'height="4"' in c.svg(), "a half-height bar in SVG too"
 
 
 def test_unit_and_order() -> None:
     c = mc.timeline({"late": (5, 6), "early": (0, 5)}, unit="ms")
-    assert c.text() == "6 ms (early 83%) ████████▏██"
+    assert c.text() == "6 ms (early 83%) █████████▏██"
     assert c.stats["names"] == ["early", "late"], "spans are drawn in time order"
-    assert mc.timeline({"only": 2}).text() == "2 s (only 100%) ██████████"
+    assert mc.timeline({"only": 2}).text() == "2 s (only 100%) ████████████"
+
+
+def test_constant_bar_width_across_phase_counts() -> None:
+    for n in (1, 2, 3, 4, 5, 6, 7, 10):
+        stages = {f"p{i}": 1.0 for i in range(n)}
+        assert len(mc.timeline(stages).text(value=False)) == CELLS
+    tbl = mc.table(
+        [
+            {"run": "single", "t": {"all": 5.0}},
+            {"run": "five", "t": {"a": 1.0, "b": 1.0, "c": 1.0, "d": 1.0, "e": 1.0}},
+        ],
+        {"run": "text", "t": "timeline"},
+    )
+    bars = [r[1].text(value=False) for r in tbl.rows]
+    assert len(bars[0]) == len(bars[1]) == CELLS
 
 
 def test_validation() -> None:

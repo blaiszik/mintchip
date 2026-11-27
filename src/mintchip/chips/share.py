@@ -21,7 +21,7 @@ from ..render.svg_base import Canvas
 from ..render.text_base import GAP, TextOptions, TextOut, cell_counts
 from ..spec import Built, Chip, ChipError, Param, chip, svg_renderer, text_renderer
 
-CELLS = 10  # text cells for the whole; each is 10%
+CELLS = 12  # total text-bar width (block cells + separator gaps)
 MAX_SEGMENTS = 4  # beyond this, opacity steps stop reading at 1x
 OPACITY = (1.0, 0.66, 0.44, 0.28)  # segment i's ink opacity, by position
 SMALL = "▄"  # a part under one cell, drawn as a half-height cell
@@ -81,7 +81,8 @@ def share(parts, *, sort=True, label=None, unit=None) -> Built:
     names = [n for n, _ in ranked]
     sizes = [v for _, v in ranked]
     fracs = [v / total for v in sizes]
-    cells, small = cell_counts(fracs, CELLS)
+    block_cells = CELLS - (len(fracs) - 1)
+    cells, small = cell_counts(fracs, block_cells)
 
     warnings = []
     if folded:
@@ -92,7 +93,7 @@ def share(parts, *, sort=True, label=None, unit=None) -> Built:
     for i in (i for i, s in enumerate(small) if s):
         warnings.append(
             f"{_who(names, i, folded)} ({fmt.pct(fracs[i])}) is under one text cell of "
-            f"{CELLS}; it is drawn as one half-height cell ({SMALL}) taken from the largest part."
+            f"{block_cells}; it is drawn as one half-height cell ({SMALL}) taken from the largest part."
         )
 
     facts = [

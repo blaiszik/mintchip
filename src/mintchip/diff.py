@@ -87,13 +87,23 @@ class DiffResult:
     warnings: tuple[str, ...]
 
 
-def _infer_higher_is_better(metric_name: str | None, unit: str | None) -> bool:
+_LOWER_HINTS = ("time", "latency", "dur", "ms", "sec", "mem", "err", "loss")
+
+
+def _infer_higher_is_better(
+    metric_name: str | None, unit: str | None, fallback_name: str | None = None
+) -> bool:
     if unit and unit.lower() in _TIME_TO_SEC:
         return False
-    low = (metric_name or "").lower()
-    if any(tok in low for tok in ("time", "latency", "dur", "ms", "sec", "mem", "err", "loss")):
-        return False
-    return any(tok in low for tok in _HIGHER_HINTS)
+    for candidate in (metric_name, fallback_name):
+        low = (candidate or "").lower()
+        if not low:
+            continue
+        if any(tok in low for tok in _LOWER_HINTS):
+            return False
+        if any(tok in low for tok in _HIGHER_HINTS):
+            return True
+    return False
 
 
 def _to_float(val: Any) -> float | None:
@@ -120,8 +130,15 @@ def _parse_generic_json(text: str) -> list[BenchEntry]:
 
     if isinstance(data, dict):
         for name, raw in data.items():
+            key_name = str(name)
             if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-                entries.append(BenchEntry(name=str(name), value=float(raw)))
+                entries.append(
+                    BenchEntry(
+                        name=key_name,
+                        value=float(raw),
+                        higher_is_better=_infer_higher_is_better(key_name, None),
+                    )
+                )
             elif isinstance(raw, list) and raw and all(_to_float(x) is not None for x in raw):
                 xs = [float(x) for x in raw]
                 mean = sum(xs) / len(xs)
@@ -132,15 +149,16 @@ def _parse_generic_json(text: str) -> list[BenchEntry]:
                 )
                 entries.append(
                     BenchEntry(
-                        name=str(name),
+                        name=key_name,
                         value=mean,
                         samples=tuple(xs) if len(xs) >= 2 else (),
                         stddev=sd,
                         n=len(xs),
+                        higher_is_better=_infer_higher_is_better(key_name, None),
                     )
                 )
             elif isinstance(raw, dict):
-                entry = _entry_from_mapping(str(name), raw)
+                entry = _entry_from_mapping(key_name, raw)
                 if entry is not None:
                     entries.append(entry)
     elif isinstance(data, list):
@@ -198,6 +216,12 @@ def _entry_from_mapping(name: str, obj: dict[str, Any]) -> BenchEntry | None:
         if lo is not None and hi is not None and lo <= hi:
             ci_bounds = (lo, hi)
 
+    explicit_hib = obj.get("higher_is_better")
+    hib = (
+        explicit_hib
+        if isinstance(explicit_hib, bool)
+        else _infer_higher_is_better(metric_key, unit, name)
+    )
     return BenchEntry(
         name=name,
         value=val,
@@ -206,7 +230,7 @@ def _entry_from_mapping(name: str, obj: dict[str, Any]) -> BenchEntry | None:
         stddev=stddev,
         n=n,
         ci=ci_bounds,
-        higher_is_better=_infer_higher_is_better(metric_key, unit),
+        higher_is_better=hib,
     )
 
 
@@ -248,7 +272,7 @@ def _entry_from_row(row: dict[str, Any], idx: int) -> BenchEntry | None:
                 stddev=stddev,
                 n=int(n_val) if n_val is not None and n_val >= 1 else None,
                 ci=ci_bounds,
-                higher_is_better=_infer_higher_is_better(k, unit),
+                higher_is_better=_infer_higher_is_better(k, unit, name),
             )
     return None
 
@@ -377,6 +401,10 @@ def _format_pct(pct: float) -> str:
     return f"{sign}{abs(pct):.1f}%"
 
 
+def _within_noise(r: DiffRow) -> bool:
+    return r.ci is not None and r.ci[0] <= 0.0 <= r.ci[1]
+
+
 def diff_benchmarks(
     base_entries: Sequence[BenchEntry],
     head_entries: Sequence[BenchEntry],
@@ -384,6 +412,7 @@ def diff_benchmarks(
     higher_is_better: bool | None = None,
     fail_on_regression: float | None = None,
     title: str | None = None,
+    ci_gate: bool = True,
 ) -> DiffResult:
     """Compare two benchmark runs and produce a shared-scale table + takeaway."""
     head_map = {e.name: e for e in head_entries}
@@ -396,6 +425,15 @@ def diff_benchmarks(
         raise ChipError(
             "mintchip diff: no matching benchmark names between BASE and HEAD.",
             fix_hint=f"BASE has [{base_names}]; HEAD has [{head_names}].",
+        )
+
+    extra_warnings: list[str] = []
+    missing_in_head = [b.name for b in base_entries if b.name not in head_map]
+    if missing_in_head:
+        shown = ", ".join(missing_in_head[:5])
+        more = f" (+{len(missing_in_head) - 5} more)" if len(missing_in_head) > 5 else ""
+        extra_warnings.append(
+            f"{len(missing_in_head)} benchmark(s) in BASE missing from HEAD: {shown}{more}."
         )
 
     scale_b, scale_h, common_unit = _scale_pair(
@@ -425,6 +463,16 @@ def diff_benchmarks(
             )
         )
 
+    distinct_units = {r.unit for r in rows}
+    mixed_units = len(distinct_units) > 1
+    mags = [abs(v) for r in rows for v in (r.base, r.head) if v != 0]
+    wide_unitless = (
+        common_unit is None
+        and len(mags) >= 2
+        and (max(mags) / min(mags)) > 100.0
+    )
+    share_scale = not (mixed_units or wide_unitless)
+
     has_ci = any(r.ci is not None for r in rows)
     table_rows: list[dict[str, Any]] = []
     for r in rows:
@@ -447,23 +495,24 @@ def diff_benchmarks(
         "name": {"chip": "text", "header": "Benchmark"},
         "base": {"chip": "num", "header": "Base"},
         "head": {"chip": "num", "header": "Head"},
-        "change": {"chip": "delta", "header": "Delta"},
+        "change": {"chip": "delta", "header": "Delta", "share": share_scale},
     }
     if has_ci:
-        columns["ci"] = {"chip": "ci", "header": "95% CI"}
+        columns["ci"] = {"chip": "ci", "header": "95% CI", "share": share_scale}
 
     tbl = mc.table(table_rows, columns, title=title)
 
-    # Classify outcomes (treat < 0.1% as unchanged)
-    improved = [r for r in rows if r.regression_pct < -0.1]
-    regressed = [r for r in rows if r.regression_pct > 0.1]
+    # Classify outcomes (treat < 0.1% or CI crossing 0 as unchanged when ci_gate is enabled)
+    improved = [r for r in rows if r.regression_pct < -0.1 and not (ci_gate and _within_noise(r))]
+    regressed = [r for r in rows if r.regression_pct > 0.1 and not (ci_gate and _within_noise(r))]
     unchanged = len(rows) - len(improved) - len(regressed)
 
-    worst = max(rows, key=lambda r: r.regression_pct)
-    best = min(rows, key=lambda r: r.regression_pct)
-
     regressions_over = (
-        tuple(r for r in rows if r.regression_pct > fail_on_regression)
+        tuple(
+            r
+            for r in rows
+            if r.regression_pct > fail_on_regression and not (ci_gate and _within_noise(r))
+        )
         if fail_on_regression is not None
         else ()
     )
@@ -475,12 +524,14 @@ def diff_benchmarks(
             f"{len(improved)} improved, {len(regressed)} regressed, {unchanged} unchanged"
         )
     ]
-    if worst.regression_pct > 0.1:
+    if regressed:
+        worst = max(regressed, key=lambda r: r.regression_pct)
         parts.append(
             f"worst regression {worst.name} ({_format_pct(worst.pct_change)}, "
             f"{_fmt.num(worst.base)}→{_fmt.num(worst.head, unit=worst.unit)})"
         )
-    elif best.regression_pct < -0.1:
+    elif improved:
+        best = min(improved, key=lambda r: r.regression_pct)
         parts.append(
             f"largest improvement {best.name} ({_format_pct(best.pct_change)}, "
             f"{_fmt.num(best.base)}→{_fmt.num(best.head, unit=best.unit)})"
@@ -497,24 +548,29 @@ def diff_benchmarks(
         regressions=regressions_over,
         fail_threshold=fail_on_regression,
         failed=failed,
-        warnings=tbl.warnings,
+        warnings=(*extra_warnings, *tbl.warnings),
     )
 
 
-def render_diff(result: DiffResult, *, format: str = "text", ascii: bool = False) -> str:
+def render_diff(
+    result: DiffResult,
+    *,
+    format: str = "text",
+    ascii: bool = False,
+    fragment: bool = False,
+) -> str:
     """Render a :class:`DiffResult` in text, ANSI, Markdown, HTML, or JSON."""
-    from .cli import _bad_format
+    from .cli import _normalize_format
 
-    if format not in OUTPUT_FORMATS:
-        raise _bad_format(format, OUTPUT_FORMATS)
-
+    fmt_name = _normalize_format(format, OUTPUT_FORMATS)
     takeaway = result.takeaway.replace("→", "->") if ascii else result.takeaway
 
-    if format == "json":
+    if fmt_name == "json":
         payload = {
             "takeaway": takeaway,
             "failed": result.failed,
             "fail_threshold": result.fail_threshold,
+            "warnings": list(result.warnings),
             "regressions": [
                 {
                     "name": r.name,
@@ -544,13 +600,22 @@ def render_diff(result: DiffResult, *, format: str = "text", ascii: bool = False
         }
         return json.dumps(payload, indent=2, ensure_ascii=ascii)
 
-    if format == "md":
-        return f"{result.table.markdown()}\n\n{takeaway}"
+    if fmt_name == "md":
+        return f"{result.table.markdown(ascii=ascii)}\n\n{takeaway}"
 
-    if format == "html":
-        return f'{result.table.html()}\n<p class="mc-takeaway">{_html.escape(takeaway)}</p>'
+    if fmt_name == "html":
+        frag = f'{result.table.html()}\n<p class="mc-takeaway">{_html.escape(takeaway)}</p>'
+        if fragment:
+            return frag
+        from .render import html as _html_mod
 
-    body = result.table.text(ascii=ascii, color=format == "ansi")
+        body = (
+            f'<div class="mc-wide">{result.table.html()}</div>\n'
+            f'<p class="mc-takeaway">{_html.escape(takeaway)}</p>'
+        )
+        return _html_mod._shell(result.table.title or "mintchip diff", body, None)
+
+    body = result.table.text(ascii=ascii, color=fmt_name == "ansi")
     return f"{body}\n\n{takeaway}"
 
 
@@ -571,18 +636,28 @@ def add_diff_parser(sub: Any, formatter_class: Any) -> argparse.ArgumentParser:
     p.add_argument("head", metavar="HEAD", help="Candidate benchmark file.")
     p.add_argument(
         "--format",
-        choices=OUTPUT_FORMATS,
         default="text",
-        help="Output format: text (default), ansi, md, html or json.",
+        help="Output format: text (default), ansi, md (or markdown), html or json.",
     )
     p.add_argument("--ascii", action="store_true", help="Pure ASCII output.")
     p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
+    p.add_argument(
+        "--fragment",
+        action="store_true",
+        help="Emit bare HTML without the page shell (for --format html).",
+    )
+    p.add_argument("-o", "--out", metavar="FILE", help="Write output to FILE instead of stdout.")
     p.add_argument(
         "--fail-on-regression",
         type=float,
         default=None,
         metavar="PCT",
         help="Exit 1 if any benchmark regresses by more than PCT percent (e.g. 5).",
+    )
+    p.add_argument(
+        "--no-ci-gate",
+        action="store_true",
+        help="Treat point-estimate regressions as failures even when 95% CI crosses 0.",
     )
     direction = p.add_mutually_exclusive_group()
     direction.add_argument(
@@ -602,7 +677,7 @@ def add_diff_parser(sub: Any, formatter_class: Any) -> argparse.ArgumentParser:
 
 def cmd_diff(args: argparse.Namespace) -> int:
     """Execute ``mintchip diff``."""
-    from .cli import _err, _error, _out, _read, _warn
+    from .cli import _err, _error, _read, _warn, _write_output
 
     if args.fail_on_regression is not None and args.fail_on_regression < 0:
         return _error(
@@ -627,12 +702,13 @@ def cmd_diff(args: argparse.Namespace) -> int:
             higher_is_better=hib,
             fail_on_regression=args.fail_on_regression,
             title=args.title,
+            ci_gate=not args.no_ci_gate,
         )
-        out = render_diff(res, format=args.format, ascii=args.ascii)
+        out = render_diff(res, format=args.format, ascii=args.ascii, fragment=args.fragment)
+        _write_output(out, args.out)
     except ChipError as e:
         return _error(e, "mintchip diff base.json head.json")
 
-    _out(out)
     warn_code = _warn(res.warnings, args.strict)
     if res.failed:
         names = ", ".join(

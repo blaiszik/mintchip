@@ -69,7 +69,7 @@ def chip_html(
     return (
         f'<span class="{cls}"><button type="button" class="mc-open" popovertarget="{pid}" '
         f'style="{_RESET};anchor-name:--{pid}" aria-label="{html.escape(chip.alt, quote=True)}">'
-        f'{inner}</button><span id="{pid}" class="mc-pop" popover '
+        f'{inner}</button><span id="{pid}" class="mc-pop" popover hidden '
         f'style="position-anchor:--{pid}">{body}</span></span>'
     )
 
@@ -129,6 +129,7 @@ border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:3
 background:var(--mc-paper,Canvas);color:var(--mc-ink,CanvasText);font-size:.84em;
 line-height:1.45;font-weight:400;font-style:normal;text-align:left;white-space:normal;
 overflow-wrap:break-word}}
+.mc-pop:popover-open{{display:block}}
 .mc-pop-l{{font-weight:600}}
 .mc-pop-w{{color:{_MUTED}}}
 @supports (position-area:bottom) or (inset-area:bottom){{.mc-pop{{inset:auto;margin:.3em 0;

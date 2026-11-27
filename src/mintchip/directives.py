@@ -603,21 +603,58 @@ def _location(text: str, pos: int) -> tuple[int, int]:
     return line, pos - (text.rfind("\n", 0, pos) + 1) + 1
 
 
+_SCAN_TOKEN = re.compile(r"(?m)(^[ ]{0,3}(?:`{3,}|~{3,}))|(`+)|(\{\{)")
+
+
+def _skip_inline_code(text: str, tick_start: int, tick_len: int) -> int:
+    """Return index after a matching inline code span, or right after the opening ticks."""
+    opener_end = tick_start + tick_len
+    close = re.compile(rf"(?<!`){'`' * tick_len}(?!`)").search(text, opener_end)
+    return close.end() if close else opener_end
+
+
 def find(text: str) -> tuple[list[str], list[Directive]]:
     """Split ``text`` into literal pieces and directives (``len(pieces) == len(directives)+1``),
-    building each directive's chip. Raises ``DirectiveError`` listing every bad directive."""
+    building each directive's chip. Skips Markdown fenced code blocks (`` ``` `` / ``~~~``) and
+    inline backtick code spans. Raises ``DirectiveError`` listing every bad directive."""
     pieces: list[str] = []
     found: list[Directive] = []
     errors: list[tuple[str, ChipError]] = []
-    buf, i = [], 0
+    buf: list[str] = []
+    i, cur = 0, 0
     while True:
-        j = text.find("{{", i)
-        if j < 0:
+        m = _SCAN_TOKEN.search(text, cur)
+        if m is None:
             buf.append(text[i:])
             break
+        if m.group(1) is not None:
+            fence = m.group(1).lstrip(" ")
+            ch, flen = fence[0], len(fence)
+            eol = text.find("\n", m.end())
+            info = text[m.end() : len(text) if eol < 0 else eol]
+            if ch == "`" and "`" in info:
+                tick_start = m.end() - flen
+                cur = _skip_inline_code(text, tick_start, flen)
+                continue
+            if eol < 0:
+                cur = len(text)
+                continue
+            close_fence = re.compile(
+                rf"(?m)^[ ]{{0,3}}{re.escape(ch)}{{{flen},}}[ \t]*(?:\r?$)"
+            ).search(text, eol + 1)
+            if close_fence is None:
+                cur = len(text)
+            else:
+                after = close_fence.end()
+                cur = after + 1 if after < len(text) and text[after] == "\n" else after
+            continue
+        if m.group(2) is not None:
+            cur = _skip_inline_code(text, m.start(), m.end() - m.start())
+            continue
+        j = m.start()
         if j > 0 and text[j - 1] == "\\":
             buf.append(text[i : j - 1] + "{{")
-            i = j + 2
+            i = cur = j + 2
             continue
         buf.append(text[i:j])
         line, col = _location(text, j)
@@ -633,7 +670,7 @@ def find(text: str) -> tuple[list[str], list[Directive]]:
         pieces.append("".join(buf))
         buf = []
         found.append(d)
-        i = end
+        i = cur = end
     pieces.append("".join(buf))
     if errors:
         raise DirectiveError(errors)
@@ -741,21 +778,23 @@ def render(
     (code spans), ``html`` (a full page via ``mintchip.document``, or embeddable ``<p>``
     blocks when ``fragment=True``). Returns the output and the directives (each with its
     ``chip``), so callers can report warnings by location."""
-    if format not in ("text", "ansi", "md", "html"):
+    fmt_name = "md" if format == "markdown" else format
+    if fmt_name not in ("text", "ansi", "md", "html"):
         raise ChipError(
-            f"mintchip render: unknown format {format!r}.", fix_hint="Use text, ansi, md or html."
+            f"mintchip render: unknown format {format!r}.",
+            fix_hint="Use text, ansi, md (or markdown) or html.",
         )
     pieces, found = find(text)
     for d, dom in zip(found, shared_domains([d.chip for d in found]), strict=True):  # type: ignore[misc]
         d.domain = dom
-    if format == "html":
+    if fmt_name == "html":
         return _html_page(pieces, found, title=title, theme=theme, fragment=fragment), found
     out = [pieces[0]]
     for d, piece in zip(found, pieces[1:], strict=True):
         c = d.chip
         assert c is not None
-        s = c.text(ascii=ascii, compact=compact, color=format == "ansi", domain=d.domain)
-        if format == "md":
+        s = c.text(ascii=ascii, compact=compact, color=fmt_name == "ansi", domain=d.domain)
+        if fmt_name == "md":
             s = f"`` {s} ``" if "`" in s else f"`{s}`"
         out += [s, piece]
     return "".join(out), found

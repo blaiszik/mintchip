@@ -82,3 +82,30 @@ def test_eval_cli_writes_markdown_report(tmp_path: Path, capsys) -> None:
     assert "Mintchip Skill Trigger Evaluation Report" in md
     assert "Recall (TP / Pos)" in md
     assert "False-trigger rate (FP / Neg)" in md
+
+
+def test_eval_live_adapter_mocked_across_agents(monkeypatch, capsys) -> None:
+    import subprocess
+
+    mod = _load_eval_module()
+    seen_cmds: list[list[str]] = []
+
+    def fake_run(cmd, **_kwargs):
+        seen_cmds.append(list(cmd))
+        return subprocess.CompletedProcess(
+            cmd,
+            0,
+            stdout='{"trigger": true, "reason": "Benchmark comparison needs word-sized chips."}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    for agent, flag in (("claude", "--model"), ("codex", "-m"), ("gemini", "-m")):
+        seen_cmds.clear()
+        rc = mod.main(["--live", "--agent", agent, "--model", "test-model", "--limit", "1", "--json"])
+        out = capsys.readouterr().out
+        payload = json.loads(out)
+        assert rc == 0
+        assert payload["mode"] == f"live:{agent}"
+        assert payload["metrics"]["total"] == 1
+        assert seen_cmds and seen_cmds[0][0] == agent and flag in seen_cmds[0]

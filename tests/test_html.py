@@ -189,3 +189,26 @@ def test_document_compact_and_accent() -> None:
     fixed = mc.document("", [chip], theme="dark", compact=True)
     assert 'class="mc-page mc-compact" data-mc-scheme="dark"' in fixed
     assert "<script>" not in fixed and "<h1>" not in fixed
+
+
+def test_popover_is_sanitizer_safe_with_hidden_and_popover_open_css() -> None:
+    c = mc.ci(0.08, (0.05, 0.11), level=0.95, label="Lift")
+    h = c.html()
+    assert 'class="mc-pop" popover hidden ' in h
+    # Stripping popover/popovertarget leaves hidden intact so details do not dump inline
+    sanitized = re.sub(r'\s+popover(?:target="[^"]*")?', "", h)
+    assert 'class="mc-pop" hidden ' in sanitized
+    assert ".mc-pop:popover-open{display:block}" in mc.css()
+
+
+def test_standalone_svg_dark_tokens_and_static_themes() -> None:
+    c = mc.ci(0.08, (0.05, 0.11), level=0.95)
+    auto_svg = c.svg(standalone=True)
+    assert "@media (prefers-color-scheme:dark)" in auto_svg
+    for token in ("--mc-accent:#5590E8", "--mc-good:#31A05C", "--mc-bad:#E85A48", "--mc-warn:#C08000"):
+        assert token in auto_svg
+    for theme, ink in (("light", "#1A1D21"), ("dark", "#E6E9EE")):
+        static_svg = c.svg(theme=theme, standalone=True)
+        assert "prefers-color-scheme" not in static_svg
+        assert f"svg{{color:{ink}}}" in static_svg
+        assert "currentColor" not in static_svg and "var(" not in static_svg

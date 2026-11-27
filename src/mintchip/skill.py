@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -32,8 +33,10 @@ __all__ = [
 VALID_TARGETS: tuple[str, ...] = (
     "claude",
     "antigravity",
+    "gemini",
     "cursor",
     "codex",
+    "copilot",
     "agents-md",
     "claude-md",
 )
@@ -41,6 +44,7 @@ VALID_TARGETS: tuple[str, ...] = (
 GLOBAL_TARGETS: tuple[str, ...] = (
     "claude",
     "antigravity",
+    "gemini",
     "cursor",
     "codex",
 )
@@ -52,6 +56,7 @@ _AGENT_HOME_DIRS: tuple[tuple[str, str], ...] = (
     ("claude", ".claude"),
     ("codex", ".codex"),
     ("antigravity", ".gemini"),
+    ("gemini", ".gemini"),
     ("cursor", ".cursor"),
 )
 
@@ -63,7 +68,7 @@ def detect_installed_agents(home: str | Path | None = None) -> list[str]:
     """Return agent targets whose standard home directory exists under ``home``.
 
     Checks ``~/.claude`` (``"claude"``), ``~/.codex`` (``"codex"``),
-    ``~/.gemini`` (``"antigravity"``), and ``~/.cursor`` (``"cursor"``).
+    ``~/.gemini`` (``"antigravity"`` and ``"gemini"``), and ``~/.cursor`` (``"cursor"``).
     """
     home_path = Path(home).expanduser() if home is not None else Path.home()
     detected: list[str] = []
@@ -95,17 +100,12 @@ def _strip_yaml_frontmatter(markdown: str) -> str:
 
 
 def _build_cursor_mdc(skill_md: str) -> str:
-    """Wrap the skill body with valid Cursor ``.mdc`` rule frontmatter."""
+    """Wrap the skill body with semantic-routed Cursor ``.mdc`` rule frontmatter."""
     body = _strip_yaml_frontmatter(skill_md).rstrip() + "\n"
     desc = json.dumps(guide.SKILL_DESCRIPTION, ensure_ascii=False)
     frontmatter = (
         "---\n"
         f"description: {desc}\n"
-        "globs:\n"
-        '  - "**/*.py"\n'
-        '  - "**/*.md"\n'
-        '  - "**/*.csv"\n'
-        '  - "**/*.json"\n'
         "alwaysApply: false\n"
         "---\n\n"
     )
@@ -221,6 +221,9 @@ def install_skill(
             else:
                 dest = root_path / ".agents" / "skills" / "mintchip" / "SKILL.md"
             written.append(_write_skill_file(dest))
+        elif target == "gemini":
+            base = home_path if global_install else root_path
+            written.append(_write_skill_file(base / ".gemini" / "skills" / "mintchip" / "SKILL.md"))
         elif target == "cursor":
             base = home_path if global_install else root_path
             dest = base / ".cursor" / "rules" / "mintchip.mdc"
@@ -230,6 +233,13 @@ def install_skill(
         elif target == "codex":
             base = home_path if global_install else root_path
             written.append(_write_skill_file(base / ".codex" / "skills" / "mintchip" / "SKILL.md"))
+        elif target == "copilot":
+            dest = (
+                (home_path / ".copilot" / "copilot-instructions.md")
+                if global_install
+                else (root_path / ".github" / "copilot-instructions.md")
+            )
+            written.append(_upsert_marked_block(dest, snippet))
         elif target == "agents-md":
             dest = (
                 (home_path / ".codex" / "AGENTS.md")
@@ -301,7 +311,7 @@ def add_skill_parser(sub: Any, formatter_class: Any) -> argparse.ArgumentParser:
         metavar="TARGET",
         help=(
             "Install target (repeatable or comma-separated): "
-            "claude, antigravity, cursor, codex, agents-md, claude-md, or all."
+            "claude, antigravity, gemini, cursor, codex, copilot, agents-md, claude-md, or all."
         ),
     )
     p.set_defaults(func=cmd_skill, _parser=p)
@@ -310,7 +320,7 @@ def add_skill_parser(sub: Any, formatter_class: Any) -> argparse.ArgumentParser:
 
 def cmd_skill(args: argparse.Namespace) -> int:
     """Execute ``mintchip skill``."""
-    from .cli import _error, _out
+    from .cli import _err, _error, _out
 
     if args.snippet:
         _out(get_agents_snippet())
@@ -327,6 +337,11 @@ def cmd_skill(args: argparse.Namespace) -> int:
             return _error(e)
         for path in written:
             _out(f"Installed: {path}")
+        if shutil.which("mintchip") is None:
+            _err(
+                "mintchip: warning: 'mintchip' was not found on PATH; agents may not invoke it. "
+                "Install globally with `uv tool install mintchip` (or use `uvx mintchip`)."
+            )
         return 0
     _out(get_skill_markdown())
     return 0

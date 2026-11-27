@@ -18,7 +18,7 @@ def test_example_reads_as_target() -> None:
 
 def test_one_hue_in_opacity_steps_largest_first() -> None:
     c = mc.share([("small", 1), ("big", 3)])
-    assert c.text(value=False) == "████████▏██" and c.stats["names"] == ["big", "small"]
+    assert c.text(value=False) == "████████▏███" and c.stats["names"] == ["big", "small"]
     svg = c.svg()
     assert "var(--mc-" not in svg, "parts are ink, never categorical colours"
     assert svg.count("<rect") == 2 and "fill-opacity:0.66" in svg
@@ -27,7 +27,7 @@ def test_one_hue_in_opacity_steps_largest_first() -> None:
 
 def test_fold_into_other_is_announced() -> None:
     c = mc.share({"a": 40, "b": 25, "c": 15, "d": 8, "e": 7, "f": 5})
-    assert c.text() == "40·25·15·20% ████▏███▏█▏██ other=3"
+    assert c.text() == "40·25·15·20% ████▏██▏█▏██ other=3"
     assert len(c.stats["fracs"]) == MAX_SEGMENTS
     assert any("3 parts" in w and "other" in w for w in c.warnings)
     assert "other (3 parts) 20 (20%)" in c.facts
@@ -38,16 +38,25 @@ def test_fold_into_other_is_announced() -> None:
 def test_part_under_one_cell_stays_visible() -> None:
     c = mc.share({"a": 95, "b": 4.5, "c": 0.5})
     assert c.text() == "95·4.5·0.5% ████████▏▄▏▄"
-    assert sum(c.stats["cells"]) == CELLS
+    assert len(c.text(value=False)) == CELLS
     assert sum("half-height" in w for w in c.warnings) == 2
     widths = [float(w) for w in re.findall(r'<rect x="[\d.]+" y="4" width="([\d.]+)"', c.svg())]
     assert min(widths) >= 1.5 and abs(sum(widths) + 3 - 67) < 0.01
 
 
 def test_comparable_cell_counts() -> None:
-    for parts in ({"a": 1}, {"a": 1, "b": 1}, {"a": 5, "b": 3, "c": 1, "d": 1}):
-        assert sum(mc.share(parts).stats["cells"]) == CELLS
-    assert mc.share({"all": 3}).text() == "100% ██████████"
+    for parts in ({"a": 1}, {"a": 1, "b": 1}, {"a": 6, "b": 3, "c": 1}, {"a": 5, "b": 3, "c": 1, "d": 1}):
+        assert len(mc.share(parts).text(value=False)) == CELLS
+    assert mc.share({"all": 3}).text() == "100% ████████████"
+    tbl = mc.table(
+        [
+            {"name": "one", "s": {"a": 100}},
+            {"name": "four", "s": {"a": 40, "b": 30, "c": 20, "d": 10}},
+        ],
+        {"name": "text", "s": "share"},
+    )
+    bars = [r[1].text(value=False) for r in tbl.rows]
+    assert len(bars[0]) == len(bars[1]) == CELLS
 
 
 def test_validation() -> None:

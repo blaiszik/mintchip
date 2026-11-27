@@ -116,3 +116,30 @@ def test_example_calls() -> None:
     assert (
         example_call("ci", "directive") == '{{ci 0.08 0.05:0.11 level=0.95 label="Retrieval lift"}}'
     )
+
+
+def test_code_blocks_and_inline_code_spans_are_skipped() -> None:
+    doc = (
+        "Run `${{ github.sha }}` and ``{{ jinja_var }}`` -> {{num 42 unit=ms}}.\n"
+        "```yaml\n"
+        "run: echo ${{ github.sha }}\n"
+        "{{not a chip}}\n"
+        "```\n"
+        "~~~jsx\n"
+        "<div style={{ color: 'red' }} />\n"
+        "~~~\n"
+        "Lone ` backtick then {{num 7}}.\n"
+    )
+    out, found = render(doc)
+    assert len(found) == 2
+    assert "`${{ github.sha }}`" in out
+    assert "``{{ jinja_var }}``" in out
+    assert "run: echo ${{ github.sha }}" in out
+    assert "{{not a chip}}" in out
+    assert "<div style={{ color: 'red' }} />" in out
+    assert "-> 42 ms." in out
+    assert "Lone ` backtick then 7." in out
+
+
+def test_render_accepts_markdown_alias() -> None:
+    assert render("x {{num 3}} y", format="markdown") == render("x {{num 3}} y", format="md")

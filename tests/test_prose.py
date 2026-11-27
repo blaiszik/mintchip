@@ -19,6 +19,7 @@ def test_formats() -> None:
     assert format_prose(t, ascii=True, loss=LOSS, lift=LIFT).isascii()
     md = format_prose(t, format="markdown", loss=LOSS, lift=LIFT)
     assert f"`{LOSS.text(compact=True)}`" in md and " & " in md
+    assert format_prose(t, format="md", loss=LOSS, lift=LIFT) == md
     assert "\x1b[34m" in format_prose(t, format="ansi", loss=LOSS, lift=LIFT)
     assert "\x1b[" in format_prose(t, color=True, loss=LOSS, lift=LIFT)
     h = format_prose(t, format="html", loss=LOSS, lift=LIFT)

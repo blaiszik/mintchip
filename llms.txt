@@ -6,14 +6,13 @@ mintchip prints numbers as word-sized graphics for a sentence or a table cell, a
 Markdown or HTML. The number comes first, so the sentence reads even without the glyph.
 
 ## When to use a chip
-- Give numbers with shape a chip (trend, interval, before/after, pass/fail, share) right after
-  the words it supports.
+- Give numbers with shape a chip (trend, interval, before/after, pass/fail, share) after the
+  words they support.
 - A number with no shape is just a number: write 0.82. One chip per sentence is normal;
   two is the ceiling. Three or more comparable values make a table (`mintchip table`).
-- Do NOT use for routine code edits, bug fixes, refactoring, stack traces, or 1–3 bare scalars
-  with no shape.
-- Use `mintchip` for inline chips & zero-dep terminal/Markdown/PR tables; reach for `mintfig`
-  for multi-panel plots, 2D relationships, publication plates, or Matplotlib auditing.
+- Do NOT use for routine code edits, bug fixes, refactoring, stack traces, or 1–3 bare scalars.
+- Use `mintchip` for inline chips & terminal/Markdown/PR tables; reach for `mintfig` for
+  multi-panel plots, 2D relationships, publication plates, or Matplotlib auditing.
 
 ## Pick a chip by what you have
 | You have | Directive | Prints |
@@ -34,22 +33,16 @@ Markdown or HTML. The number comes first, so the sentence reads even without the
 | Counts through ordered stages | `{{funnel visited=1200 "signed up"=520 activated=350 retained=290}}` | `1,200 → 520 → 350 → 290 (24%)` |
 | Three or more of the same thing | `mintchip table` (below) | |
 
-Reading the glyphs: a spark's number is its latest value (the full form adds the range);
-strip `█` pass, `▄` warn, `×` fail, `·` skip; ci `●` when the interval excludes the reference
-`│`, `○` when it crosses it.
+Glyphs: spark shows its latest value; strip `█` pass, `▄` warn, `×` fail, `·` skip; ci `●`
+excludes reference `│`, `○` crosses it.
 
 ## One grammar for commands and directives
-`mintchip spark 1.84 0.96 0.42 --band 0.38:0.48` is the directive
-`{{spark 1.84 0.96 0.42 band=0.38:0.48}}`. Values fill the chip's slots in order; options
-are `--name value` on the command line and `name=value` in a directive.
-- numbers: spaces or commas; `null` or `nan` is a gap; negatives work: `-0.2`
-- ranges: `lo:hi`, e.g. `0.05:0.11`
-- named parts: `name=value` (`"signed up"=520`); spans: `name=start:end`
-- results: `pass warn fail skip`, or `true false null`
-- flags: `--higher-is-better` / `--no-higher-is-better`; `higher_is_better=true` in a directive
-- `label` and `unit` work on most chips; quote text with spaces: `--label 'Val loss'`,
-  `label="Val loss"`, `unit=ms`
-- all options of a chip: `mintchip KIND --help`
+`mintchip spark 1.84 0.96 0.42 --band 0.38:0.48` == `{{spark 1.84 0.96 0.42 band=0.38:0.48}}`.
+Values fill slots in order; options are `--name value` (CLI) or `name=value` (directive).
+- numbers: spaces/commas (`null`/`nan` gap, `-0.2` ok); ranges: `lo:hi` (`0.05:0.11`)
+- parts: `name=value` (`"signed up"=520`); spans: `name=start:end`; results: `pass warn fail skip`
+- flags: `--higher-is-better` / `--no-higher-is-better` (`higher_is_better=true`); `label`, `unit`
+  work on most chips; full options: `mintchip KIND --help`
 
 ## 1. One chip
 ```
@@ -64,8 +57,8 @@ Val loss settled at {{spark 1.84 1.32 0.96 0.74 0.61 0.52 0.46 0.43 0.42 band=0.
 EOF
 Val loss settled at 0.42 (range 0.42 to 1.84) █▆▄▃▂▂▁▁▁, and retrieval lifted accuracy by +0.08 (95% CI +0.05 to +0.11) [·│···├─●─┤·].
 ```
-Text outside `{{…}}` is copied unchanged (`\{{` is a literal `{{`). A file works in
-place of `-`. `--check` also flags too many chips per sentence.
+Text outside `{{…}}` (and inside Markdown code blocks/spans) passes through (`\{{` is
+literal `{{`). `--check` lints chip density.
 
 ## 3. A table
 ```
@@ -83,16 +76,17 @@ retrieval  82% ██████▌·  +0.08 [··│··├─●─┤·]  0.
 warmup     75% ██████··  +0.01 [·├┼○┤······]  0.70 █▅▂
 baseline   74% █████▉··   —                   0.78 █▆▃
 ```
-Rows: a JSON list of objects or CSV, from a file or `-`. `--col KEY[:KIND[:HEADER]]` in order;
-KIND is any chip name above or `text` (left out: inferred). A `ci` cell is `[estimate, low,
-high]`; each chip column shares one scale. `--set KEY.OPTION=VALUE` applies to a whole column,
-e.g. `--set KEY.unit=s`. `--sort KEY` (largest first, text A to Z; `--asc` or `--desc` to
-choose), `--limit N`.
+Rows: JSON, JSONL, CSV or TSV from a file or stdin (`-`). `--col KEY[:KIND[:HEADER]]` (inferred
+if omitted); `ci` cells take `[est, lo, hi]`; columns share scales. `--set KEY.OPTION=VALUE`,
+`--sort KEY` (`--asc`/`--desc`), `--limit N`, `--highlight ROW`, `--baseline ROW`.
+
+## 4. SWE tool outputs & benchmark diffs
+- `mintchip from auto [FILE]` ingests `git-diff`, `hyperfine`, `junit`, `pytest/go/cargo-bench`,
+  `k6`, `esbuild`, `github-actions`, and `chrome-trace` directly into chips or tables.
+- `mintchip diff base.json head.json --fail-on-regression 5` compares runs with 95% CI noise gating.
 
 ## Output & errors
-`--format text|md|ansi|html|svg|json`, `--ascii`, `--compact`. stdout holds only the result.
-Errors go to stderr (`mintchip: error: …` + `fix:`, exit 2). Warnings (`mintchip: warning: …`,
-exit 0; exit 1 with `--strict`) flag distortions like clipped outliers.
-
-More: `mintchip from`, `mintchip diff`, `mintchip doctor`, `mintchip skill`, `mintchip schema`,
-`mintchip catalog`, or `python -m mintchip`.
+Use `--format md` for Markdown/PRs (code spans) and `--format text` for terminals (`ansi`, `html`,
+`svg`, `json`, `--ascii`, `--compact`, `-o FILE`). Errors go to stderr (`fix:`, exit 2); warnings
+exit 1 with `--strict`. Not on PATH? Use `uvx mintchip` or `python -m mintchip`.
+More: `mintchip doctor`, `mintchip skill`, `mintchip schema`, `mintchip catalog`.

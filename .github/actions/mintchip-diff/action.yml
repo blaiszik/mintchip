@@ -1,0 +1,218 @@
+name: "mintchip diff"
+description: "Zero-dependency PR benchmark diff with shared-scale Markdown delta/CI tables and optional regression gating."
+author: "mintchip"
+
+branding:
+  icon: "bar-chart-2"
+  color: "blue"
+
+inputs:
+  base:
+    description: "Path to the baseline benchmark file (JSON, CSV, hyperfine, pytest-benchmark, Go bench, or Cargo bench)."
+    required: true
+  head:
+    description: "Path to the candidate/head benchmark file."
+    required: true
+  fail-on-regression:
+    description: >-
+      Optional percentage threshold (e.g. "5"). Exits non-zero when any benchmark
+      regresses by more than this percentage (outside CI noise). Leave empty to
+      report without failing.
+    required: false
+    default: ""
+  direction:
+    description: >-
+      Optional metric direction override: "higher-is-better", "lower-is-better",
+      or empty to auto-infer from metric names and units.
+    required: false
+    default: ""
+  title:
+    description: "Optional title rendered above the diff table."
+    required: false
+    default: ""
+  ascii:
+    description: "Use pure ASCII glyphs instead of Unicode (true/false)."
+    required: false
+    default: "false"
+  strict:
+    description: "Fail the step on any mintchip warning (true/false)."
+    required: false
+    default: "false"
+  python-version:
+    description: "Python version to set up when use-existing-python is false."
+    required: false
+    default: "3.12"
+  use-existing-python:
+    description: "Reuse the python already on PATH instead of calling actions/setup-python (true/false)."
+    required: false
+    default: "false"
+  mintchip-version:
+    description: >-
+      Optional mintchip version to install (e.g. "0.2.0" or ">=0.2,<1.0").
+      Leave empty to install the local repository when running inside mintchip,
+      otherwise the latest release from PyPI.
+    required: false
+    default: ""
+  write-summary:
+    description: "Append the Markdown diff report to $GITHUB_STEP_SUMMARY (true/false)."
+    required: false
+    default: "true"
+
+outputs:
+  passed:
+    description: "Whether the benchmark diff passed the regression gate (true/false)."
+    value: ${{ steps.mintchip-diff.outputs.passed }}
+  regression-count:
+    description: "Number of benchmarks that exceeded fail-on-regression."
+    value: ${{ steps.mintchip-diff.outputs.regression-count }}
+  takeaway:
+    description: "One-line benchmark diff takeaway."
+    value: ${{ steps.mintchip-diff.outputs.takeaway }}
+  report-markdown:
+    description: "Formatted Markdown report suitable for PR comments or Step Summary."
+    value: ${{ steps.mintchip-diff.outputs.report-markdown }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      if: inputs.use-existing-python != 'true'
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install mintchip
+      shell: bash
+      env:
+        INPUT_MINTCHIP_VERSION: ${{ inputs.mintchip-version }}
+      run: |
+        set -euo pipefail
+        if [ -n "$INPUT_MINTCHIP_VERSION" ]; then
+          if [ "$INPUT_MINTCHIP_VERSION" = "." ] || [ "$INPUT_MINTCHIP_VERSION" = "local" ]; then
+            python -m pip install --no-deps . >/dev/null
+          elif [[ "$INPUT_MINTCHIP_VERSION" == [0-9]* ]]; then
+            python -m pip install "mintchip==$INPUT_MINTCHIP_VERSION" >/dev/null
+          else
+            python -m pip install "mintchip$INPUT_MINTCHIP_VERSION" >/dev/null
+          fi
+        elif [ -f pyproject.toml ] && grep -qE '^name\s*=\s*"mintchip"' pyproject.toml; then
+          python -m pip install --no-deps . >/dev/null
+        else
+          python -m pip install "mintchip" >/dev/null
+        fi
+
+    - name: Run mintchip diff
+      id: mintchip-diff
+      shell: bash
+      env:
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_HEAD: ${{ inputs.head }}
+        INPUT_FAIL_ON_REGRESSION: ${{ inputs.fail-on-regression }}
+        INPUT_DIRECTION: ${{ inputs.direction }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_ASCII: ${{ inputs.ascii }}
+        INPUT_STRICT: ${{ inputs.strict }}
+        INPUT_WRITE_SUMMARY: ${{ inputs.write-summary }}
+        PYTHONUTF8: "1"
+      run: |
+        set -euo pipefail
+        python - <<'PY'
+        from __future__ import annotations
+
+        import json
+        import os
+        import subprocess
+        import sys
+        import uuid
+        from typing import Any
+
+
+        def _is_true(value: str | None, default: bool = False) -> bool:
+            if value is None or not value.strip():
+                return default
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+        def _write_output(handle: Any, key: str, value: str) -> None:
+            if "\n" in value:
+                delim = f"MINTCHIP_EOF_{uuid.uuid4().hex}"
+                handle.write(f"{key}<<{delim}\n{value}\n{delim}\n")
+            else:
+                handle.write(f"{key}={value}\n")
+
+
+        base = os.environ["INPUT_BASE"].strip()
+        head = os.environ["INPUT_HEAD"].strip()
+        fail_pct = os.environ.get("INPUT_FAIL_ON_REGRESSION", "").strip()
+        direction = os.environ.get("INPUT_DIRECTION", "").strip().lower()
+        title = os.environ.get("INPUT_TITLE", "").strip()
+        ascii_mode = _is_true(os.environ.get("INPUT_ASCII"), default=False)
+        strict = _is_true(os.environ.get("INPUT_STRICT"), default=False)
+        write_summary = _is_true(os.environ.get("INPUT_WRITE_SUMMARY"), default=True)
+
+        common_args = [sys.executable, "-m", "mintchip", "diff", base, head]
+        if fail_pct:
+            common_args.extend(["--fail-on-regression", fail_pct])
+        if direction == "higher-is-better":
+            common_args.append("--higher-is-better")
+        elif direction == "lower-is-better":
+            common_args.append("--lower-is-better")
+        elif direction:
+            print(
+                f"::error::Invalid direction {direction!r}; use 'higher-is-better' or 'lower-is-better'.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if ascii_mode:
+            common_args.append("--ascii")
+        if strict:
+            common_args.append("--strict")
+
+        md_proc = subprocess.run(
+            [*common_args, "--format", "md"], capture_output=True, text=True, check=False
+        )
+        json_args = [*common_args, "--format", "json"]
+        if title:
+            json_args.extend(["--title", title])
+        json_proc = subprocess.run(json_args, capture_output=True, text=True, check=False)
+
+        if md_proc.stderr:
+            sys.stderr.write(md_proc.stderr)
+
+        if md_proc.returncode == 2:
+            sys.exit(2)
+
+        payload: dict[str, Any] = {}
+        if json_proc.stdout.strip():
+            try:
+                payload = json.loads(json_proc.stdout)
+            except json.JSONDecodeError:
+                payload = {}
+
+        passed = md_proc.returncode == 0
+        regressions = payload.get("regressions") or []
+        takeaway = str(payload.get("takeaway") or "").strip()
+
+        heading = f"### {title}" if title else "### mintchip diff"
+        body = md_proc.stdout.strip()
+        report_markdown = f"{heading}\n\n{body}" if body else heading
+
+        print(report_markdown)
+
+        if write_summary:
+            summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+            if summary_path:
+                with open(summary_path, "a", encoding="utf-8") as fh:
+                    fh.write(report_markdown + "\n")
+
+        output_path = os.environ.get("GITHUB_OUTPUT")
+        if output_path:
+            with open(output_path, "a", encoding="utf-8") as fh:
+                _write_output(fh, "passed", "true" if passed else "false")
+                _write_output(fh, "regression-count", str(len(regressions)))
+                _write_output(fh, "takeaway", takeaway)
+                _write_output(fh, "report-markdown", report_markdown)
+
+        if not passed:
+            sys.exit(md_proc.returncode or 1)
+        PY

@@ -53,10 +53,13 @@ def test_markdown_images_are_committed_files() -> None:
 
 def test_standalone_chips_adapt_to_light_and_dark(outputs: dict) -> None:
     svgs = [p for p in outputs if p.suffix == ".svg"]
-    assert svgs and not [p for p in svgs if p.stem.endswith("_dark")], "one file serves both modes"
+    assert svgs
     for path in svgs:
         content = outputs[path]
-        assert "prefers-color-scheme:dark" in content, path.name
+        if path.stem.endswith(("_light", "_dark")):
+            assert "prefers-color-scheme:dark" not in content, path.name
+        else:
+            assert "prefers-color-scheme:dark" in content, path.name
         ET.fromstring(content)  # well-formed, so GitHub's image proxy will serve it
 
 

@@ -35,13 +35,14 @@ OUTPUT = (
     Param(
         "format",
         "string",
-        "Choose the output: text (default), ansi (colour), md (code span), svg, html or json.",
+        "Choose the output: text (default), ansi (colour), md (or markdown), svg, html or json.",
         default="text",
         choices=FORMATS,
     ),
     Param("ascii", "bool", "Print pure ASCII.", default=False),
     Param("compact", "bool", "Shorten the value for use mid-sentence.", default=False),
     Param("strict", "bool", "Exit 1 if the chip has warnings.", default=False),
+    Param("out", "string", "Write output to FILE instead of stdout."),
 )
 COMMANDS = ("render", "table", "from", "diff", "guide", "skill", "doctor", "schema", "catalog")
 TABLE_EXAMPLE = "mintchip table results.json --col model --col acc:bar --col lift:ci --sort acc"
@@ -94,10 +95,36 @@ def _code_span(s: str) -> str:
     return f"`` {s} ``" if "`" in s else f"`{s}`"
 
 
+def _write_output(text: str, out_path: str | None = None, *, raw: bool = False) -> None:
+    """Write output to ``out_path`` (UTF-8) or stdout."""
+    if out_path is None:
+        if raw:
+            _write_raw(text)
+        else:
+            _out(text)
+        return
+    dest = Path(out_path)
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        content = text if (raw or text.endswith("\n")) else text + "\n"
+        dest.write_text(content, encoding="utf-8")
+    except OSError as e:
+        raise ChipError(
+            f"mintchip: cannot write {out_path!r}: {e.strerror}.",
+            fix_hint="Check the output path and directory permissions.",
+        ) from None
+
+
 def _read(path: str) -> str:
     """Read a file or stdin (``-``) as text, keeping line endings and undecodable bytes."""
     try:
         if path == "-":
+            isatty_fn = getattr(sys.stdin, "isatty", None)
+            if callable(isatty_fn) and isatty_fn():
+                raise ChipError(
+                    "mintchip: no input piped to stdin.",
+                    fix_hint="Pipe input into stdin (e.g. `cat data.json | mintchip table`) or pass a file path.",
+                )
             buf = getattr(sys.stdin, "buffer", None)
             data = buf.read() if buf is not None else sys.stdin.read().encode()
         else:
@@ -113,29 +140,37 @@ def _read(path: str) -> str:
 # --- kind commands --------------------------------------------------------------------------
 def chip_output(c: Chip, *, format: str = "text", ascii: bool = False, compact: bool = False):
     """The text a kind command prints for ``c`` in ``format``."""
-    if format == "text":
+    fmt_name = _normalize_format(format, FORMATS)
+    if fmt_name == "text":
         return c.text(ascii=ascii, compact=compact)
-    if format == "ansi":
+    if fmt_name == "ansi":
         return c.text(ascii=ascii, compact=compact, color=True)
-    if format == "md":
+    if fmt_name == "md":
         return _code_span(c.text(ascii=ascii, compact=compact))
-    if format == "svg":
+    if fmt_name == "svg":
         svg = c.svg(standalone=True)
         if not svg:
             raise ChipError(
                 f"mintchip.{c.kind} has no graphic.", fix_hint="Use --format text, md or html."
             )
         return svg
-    if format == "html":
+    if fmt_name == "html":
         return c.html()
-    if format == "json":
+    if fmt_name == "json":
         return json.dumps({**c.summary(), "spec": c.to_dict()}, indent=2, ensure_ascii=ascii)
     raise _bad_format(format, FORMATS)
 
 
+def _normalize_format(fmt: str, allowed: Sequence[str]) -> str:
+    norm = "md" if fmt == "markdown" and "md" in allowed else fmt
+    if norm not in allowed:
+        raise _bad_format(fmt, allowed)
+    return norm
+
+
 def _bad_format(fmt: str, allowed: Sequence[str]) -> ChipError:
     close = difflib.get_close_matches(fmt, allowed, n=1, cutoff=0.5)
-    alias = "md" if fmt in ("markdown", "gfm") and "md" in allowed else None
+    alias = "md" if fmt == "gfm" and "md" in allowed else None
     best = alias or (close[0] if close else None)
     hint = f"Use --format {best}." if best else f"Use one of: {', '.join(allowed)}."
     return ChipError(f"mintchip: unknown format {fmt!r}.", fix_hint=hint)
@@ -143,16 +178,27 @@ def _bad_format(fmt: str, allowed: Sequence[str]) -> ChipError:
 
 def _cmd_kind(kind: str, tokens: Sequence[str]) -> int:
     example = example_call(kind)
+    norm_tokens: list[str] = []
+    after_sep = False
+    for tok in tokens:
+        if tok == "--":
+            after_sep = True
+            norm_tokens.append(tok)
+        elif not after_sep and tok == "-o":
+            norm_tokens.append("--out")
+        elif not after_sep and tok.startswith("-o="):
+            norm_tokens.append("--out=" + tok[3:])
+        else:
+            norm_tokens.append(tok)
     try:
-        kw = parse_tokens(kind, tokens, extra=OUTPUT, style="cli")
+        kw = parse_tokens(kind, norm_tokens, extra=OUTPUT, style="cli")
         opts = {p.name: kw.pop(p.name, p.default) for p in OUTPUT}
-        if opts["format"] not in FORMATS:
-            raise _bad_format(opts["format"], FORMATS)
+        fmt_name = _normalize_format(opts["format"], FORMATS)
         c = REGISTRY[kind].fn(**kw)
-        text = chip_output(c, format=opts["format"], ascii=opts["ascii"], compact=opts["compact"])
+        text = chip_output(c, format=fmt_name, ascii=opts["ascii"], compact=opts["compact"])
+        _write_output(text, opts["out"])
     except ChipError as e:
         return _error(e, example)
-    _out(text)
     return _warn(c.warnings, opts["strict"])
 
 
@@ -160,23 +206,21 @@ def _cmd_kind(kind: str, tokens: Sequence[str]) -> int:
 def _cmd_render(args: argparse.Namespace) -> int:
     from . import directives
 
-    text = _read(args.file)
-    title = args.title or (Path(args.file).stem if args.file != "-" else "mintchip")
     try:
+        fmt_name = _normalize_format(args.format, ("text", "ansi", "md", "html"))
+        text = _read(args.file)
+        title = args.title or (Path(args.file).stem if args.file != "-" else "mintchip")
         out, found = directives.render(
             text,
-            format=args.format,
+            format=fmt_name,
             ascii=args.ascii,
             compact=args.compact,
             title=title,
             fragment=args.fragment,
         )
+        _write_output(out, args.out, raw=(fmt_name != "html"))
     except ChipError as e:
         return _error(e)
-    if args.format == "html":
-        _out(out)
-    else:
-        _write_raw(out)
     warnings = [
         f"{d.where}: {w}" for d in found for w in (d.chip.warnings_for(d.domain) if d.chip else ())
     ]
@@ -318,6 +362,7 @@ def _table_rows(path: str) -> Any:
 
 def _cmd_table(args: argparse.Namespace) -> int:
     try:
+        fmt_name = _normalize_format(args.format, ("text", "ansi", "md", "html", "json"))
         columns = table_columns(args.col, args.set)
         t = mc.table(
             _table_rows(args.file),
@@ -329,17 +374,26 @@ def _cmd_table(args: argparse.Namespace) -> int:
             highlight=args.highlight or None,
             baseline=args.baseline,
         )
-        if args.format == "json":
+        if fmt_name == "json":
             text = json.dumps(t.to_dict(), indent=2, ensure_ascii=args.ascii)
-        elif args.format == "md":
-            text = t.markdown()
-        elif args.format == "html":
-            text = t.html()
+        elif fmt_name == "md":
+            text = t.markdown(ascii=args.ascii)
+        elif fmt_name == "html":
+            if args.fragment:
+                text = t.html()
+            else:
+                from .render import html as _html_mod
+
+                text = _html_mod._shell(
+                    t.title or "mintchip",
+                    f'<div class="mc-wide">{t.html()}</div>',
+                    None,
+                )
         else:
-            text = t.text(ascii=args.ascii, color=args.format == "ansi", width=args.width)
+            text = t.text(ascii=args.ascii, color=fmt_name == "ansi", width=args.width)
+        _write_output(text, args.out)
     except ChipError as e:
         return _error(e, TABLE_EXAMPLE)
-    _out(text)
     return _warn(t.warnings, args.strict)
 
 
@@ -501,10 +555,12 @@ def _kind_parser(sub: Any, kind: str) -> None:
     out = p.add_argument_group("output")
     for param in OUTPUT:
         flag = "--" + param.name
-        if param.type == "bool":
+        if param.name == "out":
+            out.add_argument("-o", flag, metavar="FILE", help=_pct(param.help))
+        elif param.type == "bool":
             out.add_argument(flag, action="store_true", help=_pct(param.help))
         else:
-            out.add_argument(flag, choices=param.choices, help=_pct(param.help))
+            out.add_argument(flag, metavar="FORMAT", help=_pct(param.help))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -514,7 +570,10 @@ def build_parser() -> argparse.ArgumentParser:
         epilog="Start with: mintchip guide",
         formatter_class=_Help,
     )
-    sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"mintchip {mc.__version__}"
+    )
+    sub = parser.add_subparsers(dest="command", required=False, metavar="COMMAND")
 
     p = sub.add_parser(
         "render",
@@ -530,8 +589,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=_Help,
     )
     p.add_argument("file", nargs="?", default="-", metavar="FILE", help="Prose file; - is stdin.")
-    p.add_argument("--format", choices=("text", "ansi", "md", "html"), default="text",
-                   help="text (default), ansi, md (chips in code spans) or html (a full page).")  # fmt: skip
+    p.add_argument("--format", default="text",
+                   help="text (default), ansi, md (or markdown) or html (a full page).")  # fmt: skip
     p.add_argument("--ascii", action="store_true", help="Pure ASCII chips.")
     p.add_argument("--compact", action="store_true", help="Shorter chip values.")
     p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
@@ -539,6 +598,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--title", help="Page title for --format html.")
     p.add_argument("--fragment", action="store_true",
                    help="Emit embeddable HTML without the page shell (for --format html).")  # fmt: skip
+    p.add_argument("-o", "--out", metavar="FILE", help="Write output to FILE instead of stdout.")
     p.set_defaults(func=_cmd_render, _parser=p)
 
     p = sub.add_parser(
@@ -555,7 +615,13 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=f"example:\n  $ {TABLE_EXAMPLE} --set acc.target=0.9",
         formatter_class=_Help,
     )
-    p.add_argument("file", metavar="FILE", help="A .json, .jsonl, .csv or .tsv file; - is stdin.")
+    p.add_argument(
+        "file",
+        nargs="?",
+        default="-",
+        metavar="FILE",
+        help="A .json, .jsonl, .csv or .tsv file; - (default) is stdin.",
+    )
     p.add_argument("--col", action="append", default=[], metavar="KEY[:KIND[:HEADER]]",
                    help="Add a column; repeat in display order. No --col: every key.")  # fmt: skip
     p.add_argument("--set", action="append", default=[], metavar="KEY.OPTION=VALUE",
@@ -574,8 +640,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Mark a row matching ROW as the baseline.")  # fmt: skip
     p.add_argument("--width", type=int, default=80, metavar="N",
                    help="Target width for text output (default: 80).")  # fmt: skip
-    p.add_argument("--format", choices=("text", "ansi", "md", "html", "json"), default="text",
-                   help="text (default), ansi, md, html or json.")  # fmt: skip
+    p.add_argument("--format", default="text",
+                   help="text (default), ansi, md (or markdown), html or json.")  # fmt: skip
+    p.add_argument("--fragment", action="store_true",
+                   help="Emit bare HTML without the page shell (for --format html).")  # fmt: skip
+    p.add_argument("-o", "--out", metavar="FILE", help="Write output to FILE instead of stdout.")
     p.add_argument("--ascii", action="store_true", help="Pure ASCII.")
     p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
     p.set_defaults(func=_cmd_table, _parser=p)
@@ -598,10 +667,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     from . import diff as _diff
     from . import doctor as _doctor
-    from . import ingest as _ingest
     from . import skill as _skill
+    from .ingest import add_from_parser as _add_from_parser
 
-    _ingest.add_from_parser(sub, _Help)
+    _add_from_parser(sub, _Help)
     _diff.add_diff_parser(sub, _Help)
     _skill.add_skill_parser(sub, _Help)
     _doctor.add_doctor_parser(sub, _Help)
@@ -636,6 +705,9 @@ def _unknown_option(parser: argparse.ArgumentParser, extra: Sequence[str]) -> Ch
 
 
 def _main(argv: list[str]) -> int:
+    if not argv:
+        build_parser().print_help()
+        return 0
     if argv and argv[0] in REGISTRY and not _wants_help(argv[1:]):
         return _cmd_kind(argv[0], argv[1:])
     if argv and not argv[0].startswith("-") and argv[0] not in (*COMMANDS, *REGISTRY):
@@ -651,7 +723,10 @@ def _main(argv: list[str]) -> int:
     parser = build_parser()
     args, extra = parser.parse_known_args(argv)
     if extra:
-        return _error(_unknown_option(args._parser, extra))
+        return _error(_unknown_option(getattr(args, "_parser", parser), extra))
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return 0
     return int(args.func(args))
 
 

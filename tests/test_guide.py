@@ -17,7 +17,15 @@ def test_guide_is_short_and_covers_every_kind() -> None:
         assert entry["have"] in text and k.example_chip().text() in text
     for rule in ("two is the ceiling", "make a table", "just a number"):
         assert rule in text
-    for command in ("$ mintchip ci ", "$ mintchip render - <<'EOF'", "$ mintchip table - "):
+    for command in (
+        "$ mintchip ci ",
+        "$ mintchip render - <<'EOF'",
+        "$ mintchip table - ",
+        "mintchip from auto",
+        "mintchip diff base.json head.json --fail-on-regression 5",
+        "--format md",
+        "uvx mintchip",
+    ):
         assert command in text
     assert run(["guide"]) == (0, text, "")
 

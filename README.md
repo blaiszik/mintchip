@@ -4,7 +4,7 @@ Word-sized graphics for the numbers in an agent's report. A trend, an interval, 
 after or a pass/fail run sits inside the sentence or table cell that mentions it, as plain text,
 Markdown or HTML, from one shell command. Python standard library only.
 
-![One command, every surface: coding-agent numbers turned into inline chips, a shared-scale forest plot, and light/dark HTML](gallery/output/opener.gif)
+![One command, every surface: coding-agent numbers turned into inline chips, a shared-scale forest plot, and light/dark HTML](https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/opener.gif)
 
 <!-- BEGIN mintchip:hero -->
 **Before**: the report as an agent usually writes it.
@@ -23,7 +23,11 @@ reached 0.74 accuracy and a final validation loss of 0.78.
 **After**: the same report with two chips and one table, rendered as HTML (`--format html`) in your
 light or dark theme,
 
-![An experiment summary, rendered as HTML](gallery/output/pairs/experiment.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/pairs/experiment_dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/pairs/experiment_light.svg">
+  <img alt="An experiment summary, rendered as HTML" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/pairs/experiment_light.svg">
+</picture>
 
 and as it prints in a terminal:
 
@@ -74,11 +78,16 @@ baseline       0.74   —                   0.78 █▇▆▅▄▃▃▃▃
 ## Install
 
 ```bash
-pip install mintchip          # or: uvx mintchip guide
-mintchip skill --install --global   # auto-detects Claude Code, Codex, Cursor, Antigravity
+uv tool install mintchip            # isolated global CLI (recommended)
+# or: pip install mintchip
+# or run once with no install: uvx mintchip guide
+
+mintchip skill --install --global   # auto-detects Claude Code, Codex, Cursor, Gemini, Copilot, Antigravity
+# or via the open skills CLI:
+npx skills add blaiszik/mintchip
 ```
 
-Python 3.10 or later, no dependencies. It installs one command, `mintchip`.
+Python 3.10 or later, zero dependencies. It installs one command, `mintchip`.
 
 ## Three commands (plus pipes & diffs)
 
@@ -128,7 +137,10 @@ named in a warning on stderr; `--strict` makes that exit 1.
 <!-- END mintchip:commands -->
 
 **Pipes, benchmark diffs, and diagnostics.** Parse real developer tool outputs with zero extra
-dependencies, compare two runs, or verify glyph legibility in your terminal:
+dependencies (`git-diff`, `hyperfine`, `junit`, `pytest-benchmark`, `go-bench`, `cargo-bench`,
+`github-actions`, `k6`, `esbuild`, `chrome-trace`), compare two runs in CI with the reusable
+[`mintchip-diff` GitHub Action](https://github.com/blaiszik/mintchip/blob/main/.github/actions/mintchip-diff/action.yml),
+or verify glyph legibility in your terminal:
 
 ```bash
 git diff --numstat | mintchip from git-diff             # share chip of changed lines by area
@@ -141,40 +153,43 @@ mintchip doctor                                         # check UTF-8, ANSI, and
 
 ## Pick a chip by what you have
 
-Each image below is the chip at its real size; it takes the colour of the text around it, so it
-reads in light and dark themes. The [gallery](gallery/README.md) shows every chip in a sentence,
-in a table beside its siblings, and at its edge cases, with the warning each one prints.
+Each image below is the chip at its real size, adapting cleanly to light and dark themes. The
+[gallery](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md) (and the
+[live interactive HTML gallery](https://blaiszik.github.io/mintchip/)) shows every chip in a
+sentence, in a table beside its siblings, and at its edge cases, with the warning each one prints.
 
 <!-- BEGIN mintchip:catalog -->
 | You have | Chip | At 1× | As text |
 |---|---|---|---|
-| One number, no context | [`num`](gallery/README.md#num) | — | `0.82 ± 0.03` |
-| A series over time or steps | [`spark`](gallery/README.md#spark) | ![spark](gallery/output/chips/spark.svg) | `0.42 █▆▄▃▂▂▁▁▁` |
-| An estimate with an interval | [`ci`](gallery/README.md#ci) | ![ci](gallery/output/chips/ci.svg) | `+0.08 [·│···├─●─┤·]` |
-| Raw samples of one measurement | [`dist`](gallery/README.md#dist) | ![dist](gallery/output/chips/dist.svg) | `med 20.3 ms [▃▃▃█·▃▃··▃]→47.8` |
-| A value against a total | [`bar`](gallery/README.md#bar) | ![bar](gallery/output/chips/bar.svg) | `82% ██████▌│` |
-| A reading with a normal range | [`gauge`](gallery/README.md#gauge) | ![gauge](gallery/output/chips/gauge.svg) | `7.38 [···├●───┤··]` |
-| A before and an after value | [`delta`](gallery/README.md#delta) | ![delta](gallery/output/chips/delta.svg) | `0.74→0.82 [··○────●··]` |
-| A pass/warn/fail/skip result per item | [`strip`](gallery/README.md#strip) | ![strip](gallery/output/chips/strip.svg) | `5/8 pass ███▄█×█·` |
-| Parts of a whole | [`share`](gallery/README.md#share) | ![share](gallery/output/chips/share.svg) | `62·28·10% ██████▏███▏█` |
-| A count out of a total, or a probability | [`ratio`](gallery/README.md#ratio) | ![ratio](gallery/output/chips/ratio.svg) | `3/10 ●●●○○○○○○○` |
-| Durations of phases | [`timeline`](gallery/README.md#timeline) | ![timeline](gallery/output/chips/timeline.svg) | `7.5 s ██▏██████▏██` |
-| A position in a ranked field | [`rank`](gallery/README.md#rank) | ![rank](gallery/output/chips/rank.svg) | `#2/18 [········●·]` |
-| Signed contributions from a start to a total | [`waterfall`](gallery/README.md#waterfall) | ![waterfall](gallery/output/chips/waterfall.svg) | `0.63→0.82 (+0.19)` |
-| Counts through ordered stages | [`funnel`](gallery/README.md#funnel) | ![funnel](gallery/output/chips/funnel.svg) | `1,200 → 290 (24%)` |
+| One number, no context | [`num`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#num) | — | `0.82 ± 0.03` |
+| A series over time or steps | [`spark`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#spark) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/spark_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/spark_light.svg"><img alt="spark" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/spark_light.svg"></picture> | `0.42 █▆▄▃▂▂▁▁▁` |
+| An estimate with an interval | [`ci`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#ci) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/ci_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/ci_light.svg"><img alt="ci" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/ci_light.svg"></picture> | `+0.08 [·│···├─●─┤·]` |
+| Raw samples of one measurement | [`dist`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#dist) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/dist_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/dist_light.svg"><img alt="dist" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/dist_light.svg"></picture> | `med 20.3 ms [▃▃▃█·▃▃··▃]→47.8` |
+| A value against a total | [`bar`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#bar) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/bar_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/bar_light.svg"><img alt="bar" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/bar_light.svg"></picture> | `82% ██████▌│` |
+| A reading with a normal range | [`gauge`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#gauge) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/gauge_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/gauge_light.svg"><img alt="gauge" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/gauge_light.svg"></picture> | `7.38 [···├●───┤··]` |
+| A before and an after value | [`delta`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#delta) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/delta_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/delta_light.svg"><img alt="delta" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/delta_light.svg"></picture> | `0.74→0.82 [··○────●··]` |
+| A pass/warn/fail/skip result per item | [`strip`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#strip) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/strip_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/strip_light.svg"><img alt="strip" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/strip_light.svg"></picture> | `5/8 pass ███▄█×█·` |
+| Parts of a whole | [`share`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#share) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/share_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/share_light.svg"><img alt="share" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/share_light.svg"></picture> | `62·28·10% ██████▏███▏█` |
+| A count out of a total, or a probability | [`ratio`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#ratio) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/ratio_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/ratio_light.svg"><img alt="ratio" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/ratio_light.svg"></picture> | `3/10 ●●●○○○○○○○` |
+| Durations of phases | [`timeline`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#timeline) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/timeline_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/timeline_light.svg"><img alt="timeline" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/timeline_light.svg"></picture> | `7.5 s ██▏██████▏██` |
+| A position in a ranked field | [`rank`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#rank) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/rank_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/rank_light.svg"><img alt="rank" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/rank_light.svg"></picture> | `#2/18 [········●·]` |
+| Signed contributions from a start to a total | [`waterfall`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#waterfall) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/waterfall_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/waterfall_light.svg"><img alt="waterfall" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/waterfall_light.svg"></picture> | `0.63→0.82 (+0.19)` |
+| Counts through ordered stages | [`funnel`](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#funnel) | <picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/funnel_dark.svg"><source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/funnel_light.svg"><img alt="funnel" src="https://raw.githubusercontent.com/blaiszik/mintchip/main/gallery/output/chips/funnel_light.svg"></picture> | `1,200 → 290 (24%)` |
 | Three or more of the same thing | `mintchip table` | | |
 <!-- END mintchip:catalog -->
 
 ## For agents
 
-- `mintchip skill --install --global` installs the skill for Claude Code, Codex, Cursor, and
-  Antigravity (auto-detected), or `--target agents-md` / `--target claude-md` to upsert a marked
-  block into `AGENTS.md` / `CLAUDE.md`.
+- `mintchip skill --install --global` installs the skill for Claude Code, Codex, Cursor, Gemini
+  CLI, GitHub Copilot, and Antigravity (auto-detected), or `--target agents-md` / `--target
+  claude-md` to upsert a marked block into `AGENTS.md` / `CLAUDE.md`. You can also install via
+  `npx skills add blaiszik/mintchip`.
 - `mintchip guide` prints a cheat-sheet of under 6,000 characters: when a chip helps (and when to
   leave plain numbers alone), the table above, the token grammar, and the three commands with real
   output. It is written for a system prompt.
-- [`skills/mintchip/SKILL.md`](skills/mintchip/SKILL.md) and [`llms.txt`](llms.txt) are generated
-  directly from `mintchip guide --write .` so they never drift.
+- [`skills/mintchip/SKILL.md`](https://github.com/blaiszik/mintchip/blob/main/skills/mintchip/SKILL.md)
+  and [`llms.txt`](https://github.com/blaiszik/mintchip/blob/main/llms.txt) are generated directly
+  from `mintchip guide --write .` so they never drift.
 - `mintchip guide --agents` prints a paragraph for your own `AGENTS.md` or `CLAUDE.md`:
 
 <!-- BEGIN mintchip:agents -->
@@ -192,8 +207,18 @@ two at most, and leave numbers with no shape as plain numbers.
 - `mintchip schema [KIND]` prints JSON Schema (draft 2020-12) for chip specs, ready to register
   as a tool definition. A directive takes the same JSON: `{{ {"chip": "ci", "estimate": 0.08,
   "interval": [0.05, 0.11]} }}`.
-- [Recipes](gallery/README.md#recipes-for-coding-agents) for test results, diff size, coverage,
-  benchmarks, time per phase and context budget.
+- [Recipes](https://github.com/blaiszik/mintchip/blob/main/gallery/README.md#recipes-for-coding-agents)
+  for test results, diff size, coverage, benchmarks, time per phase and context budget.
+
+## Escalation ladder (sister package: `mintfig`)
+
+Use the smallest visual that fits the numbers:
+
+| What you are reporting | Reach for |
+|---|---|
+| 1–3 scalar numbers with no shape | Plain prose (no graphic needed) |
+| Inline trends, intervals, before/after deltas, pass/fail strips, or shared-scale tables in terminal, Markdown, or HTML | **`mintchip`** (zero dependencies) |
+| Standalone charts, multi-panel figures, Matplotlib/Seaborn audits (`mint.check`), or journal PDF plates | **[`mintfig`](https://github.com/blaiszik/mintfig)** (`pip install "mintfig[chip]"` installs both with shared light/dark themes and `mint.brief()` integration) |
 
 ## Design rules
 

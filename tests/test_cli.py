@@ -43,6 +43,8 @@ def test_output_formats() -> None:
     data = json.loads(run([*base, "--format", "json"])[1])
     assert mc.from_dict(data["spec"]).text() == data["text"] == c.text()
     code, out, err = run([*base, "--format", "markdown"])
+    assert (code, err) == (0, "") and out == f"`{c.text()}`\n"
+    code, out, err = run([*base, "--format", "gfm"])
     assert (code, out) == (2, "") and "Use --format md" in err
 
 
@@ -202,3 +204,84 @@ def test_python_dash_m_and_sort_help() -> None:
     assert "largest first; text A to Z" in out
     rows = '[{"m": "b"}, {"m": "a"}]'
     assert run(["table", "-", "--col", "m", "--sort", "m"], rows)[1].split()[-2:] == ["a", "b"]
+
+
+def test_cli_ergonomics_version_zero_args_tty_out_html_ascii_and_exports(
+    tmp_path, monkeypatch
+) -> None:
+    # -V / --version
+    for flag in ("-V", "--version"):
+        code, out, err = run([flag])
+        assert (code, err) == (0, "") and f"mintchip {mc.__version__}" in out
+
+    # 0 args -> friendly help, exit 0
+    code, out, err = run([])
+    assert (code, err) == (0, "") and "usage: mintchip" in out
+
+    # table with optional FILE reads stdin
+    rows_json = json.dumps(ROWS)
+    code, out_no_file, err = run(["table", "--col", "model", "--col", "acc:bar"], rows_json)
+    code2, out_dash, _ = run(["table", "-", "--col", "model", "--col", "acc:bar"], rows_json)
+    assert (code, err) == (0, "") and code2 == 0 and out_no_file == out_dash
+
+    # TTY stdin raises helpful ChipError instead of hanging
+    class FakeTTY(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    monkeypatch.setattr("sys.stdin", FakeTTY())
+    err_buf = io.StringIO()
+    out_buf = io.StringIO()
+    import contextlib
+
+    with contextlib.redirect_stdout(out_buf), contextlib.redirect_stderr(err_buf):
+        rc = main(["table"])
+    assert rc == 2 and "no input piped to stdin" in err_buf.getvalue()
+
+    # -o / --out across kind, render, table
+    chip_out = tmp_path / "chip.txt"
+    code, out, err = run(["spark", "1", "2", "3", "-o", str(chip_out)])
+    assert (code, out, err) == (0, "", "")
+    assert chip_out.read_text(encoding="utf-8") == mc.spark([1, 2, 3]).text() + "\n"
+
+    render_out = tmp_path / "rendered.md"
+    code, out, err = run(["render", "--format", "markdown", "-o", str(render_out)], "v={{num 3}}")
+    assert (code, out, err) == (0, "", "")
+    assert render_out.read_text(encoding="utf-8") == "v=`3`"
+
+    table_html = tmp_path / "table.html"
+    code, out, err = run(
+        ["table", "--format", "html", "-o", str(table_html)], rows_json
+    )
+    assert (code, out, err) == (0, "", "")
+    html_text = table_html.read_text(encoding="utf-8")
+    assert html_text.startswith("<!doctype html>")
+    assert '<meta charset="utf-8">' in html_text
+    assert mc.css() in html_text and "<table" in html_text
+
+    # --fragment for bare table HTML
+    code, frag, err = run(["table", "--format", "html", "--fragment"], rows_json)
+    assert (code, err) == (0, "") and frag.startswith("<table") and "<!doctype" not in frag.lower()
+
+    # --format md --ascii is pure ASCII for Table and Chip
+    code, md_ascii, err = run(["table", "--col", "model", "--col", "acc:bar", "--format", "md", "--ascii"], rows_json)
+    assert (code, err) == (0, "") and md_ascii.isascii()
+    assert mc.spark([1, 2, 3]).markdown(ascii=True).isascii()
+    assert mc.table(ROWS, {"model": "text", "acc": "bar"}).markdown(ascii=True).isascii()
+
+    # Invalid format on subcommands routes through _bad_format
+    for sub_argv in (
+        ["render", "--format", "bogus"],
+        ["table", "--format", "bogus"],
+        ["from", "git-diff", "--format", "bogus"],
+    ):
+        code, _, err = run(sub_argv, "42\t8\tsrc/a.py\n")
+        assert code == 2 and "unknown format" in err and "fix:" in err
+
+    # Lazy exports in mintchip.__all__ remain callable even after submodule import
+    from mintchip.ingest import detect_format
+
+    assert callable(detect_format)
+    for name in ("ingest", "diff_benchmarks", "schema", "install_skill"):
+        assert name in mc.__all__
+        assert callable(getattr(mc, name))

@@ -308,19 +308,22 @@ class Table:
         return "\n".join(line.rstrip() for line in lines), notes
 
     # --- markdown -----------------------------------------------------------------------------
-    def markdown(self) -> str:
+    def markdown(self, *, ascii: bool = False) -> str:
         """A GFM table: text cells as text, chip cells as their compact text in code spans,
         values padded so the glyphs line up in a monospace code font."""
-        blocks = self._blocks(False, False)
+        blocks = self._blocks(ascii, False)
+        dash = EMPTY_ASCII if ascii else EMPTY
         head, rule = [], []
         for j, (col, b) in enumerate(zip(self.columns, blocks, strict=True)):
-            h = col.header
+            h = _tx(col.header, ascii)
             if b.scale and self.domains[j] is not None:
                 lo, hi = self.domains[j]  # type: ignore[misc]
-                h += f" ({fmt.num(lo, sig=2)} to {fmt.num(hi, sig=2, signed=lo < 0 < hi)})"
+                lo_s = _tx(fmt.num(lo, sig=2), ascii)
+                hi_s = _tx(fmt.num(hi, sig=2, signed=lo < 0 < hi), ascii)
+                h += f" ({lo_s} to {hi_s})"
             head.append(_md_escape(h))
             rule.append("--:" if b.right else ":--")
-        lines = [f"**{_md_escape(self.title)}**", ""] if self.title else []
+        lines = [f"**{_md_escape(_tx(self.title, ascii))}**", ""] if self.title else []
         lines += ["| " + " | ".join(head) + " |", "|" + "|".join(rule) + "|"]
         for i, row in enumerate(self.rows):
             hi, base = self._row_role(i)
@@ -328,9 +331,9 @@ class Table:
             for j, b in enumerate(blocks):
                 cell = row[j]
                 if cell is None:
-                    out.append(EMPTY)
+                    out.append(dash)
                 elif b.text:
-                    txt = _md_escape(str(cell))
+                    txt = _md_escape(_tx(str(cell), ascii))
                     if hi:
                         txt = f"**{txt}**"
                     elif base:

@@ -48,7 +48,7 @@ def test_local_install_defaults_and_all_targets(tmp_path: Path) -> None:
     assert expected[0].read_text(encoding="utf-8") == guide.skill_text()
     assert skill.MARKER_START in expected[2].read_text(encoding="utf-8")
 
-    # Install all targets including cursor, codex, claude-md
+    # Install all targets including gemini, cursor, codex, copilot, claude-md
     all_written = skill.install_skill(root=tmp_path, targets=["all"])
     assert len(all_written) == len(skill.VALID_TARGETS)
     cursor_mdc = tmp_path / ".cursor" / "rules" / "mintchip.mdc"
@@ -56,7 +56,11 @@ def test_local_install_defaults_and_all_targets(tmp_path: Path) -> None:
     mdc_text = cursor_mdc.read_text(encoding="utf-8")
     assert mdc_text.startswith("---\ndescription:")
     assert "alwaysApply: false" in mdc_text
+    assert "globs:" not in mdc_text
+    assert (tmp_path / ".gemini" / "skills" / "mintchip" / "SKILL.md").is_file()
     assert (tmp_path / ".codex" / "skills" / "mintchip" / "SKILL.md").is_file()
+    copilot_md = tmp_path / ".github" / "copilot-instructions.md"
+    assert copilot_md.is_file() and skill.MARKER_START in copilot_md.read_text(encoding="utf-8")
     assert (tmp_path / "CLAUDE.md").is_file()
 
 
@@ -110,7 +114,19 @@ def test_global_install_auto_detects_agent_homes(tmp_path: Path) -> None:
     ]
 
 
-def test_cli_skill_install_and_bad_target(tmp_path: Path) -> None:
+    # Home with .gemini installs both Antigravity and Gemini CLI paths
+    gemini_home = tmp_path / "gemini_home"
+    (gemini_home / ".gemini").mkdir(parents=True)
+    assert skill.detect_installed_agents(gemini_home) == ["antigravity", "gemini"]
+    gem_paths = skill.install_skill(global_install=True, home=gemini_home)
+    assert gem_paths == [
+        gemini_home / ".gemini" / "config" / "skills" / "mintchip" / "SKILL.md",
+        gemini_home / ".gemini" / "skills" / "mintchip" / "SKILL.md",
+    ]
+
+
+def test_cli_skill_install_and_bad_target(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/local/bin/mintchip")
     code, out, err = run(
         ["skill", "--install", "--root", str(tmp_path), "--target", "claude,claude-md"]
     )
@@ -118,6 +134,16 @@ def test_cli_skill_install_and_bad_target(tmp_path: Path) -> None:
     assert "Installed:" in out
     assert (tmp_path / ".claude" / "skills" / "mintchip" / "SKILL.md").is_file()
     assert (tmp_path / "CLAUDE.md").is_file()
+
+    # Warns when mintchip is not on PATH
+    monkeypatch.setattr("shutil.which", lambda name: None)
+    code_w, out_w, err_w = run(
+        ["skill", "--install", "--root", str(tmp_path), "--target", "gemini,copilot"]
+    )
+    assert code_w == 0 and "Installed:" in out_w
+    assert "uv tool install mintchip" in err_w and "uvx mintchip" in err_w
+    assert (tmp_path / ".gemini" / "skills" / "mintchip" / "SKILL.md").is_file()
+    assert (tmp_path / ".github" / "copilot-instructions.md").is_file()
 
     code, out, err = run(["skill", "--install", "--root", str(tmp_path), "--target", "vim"])
     assert (code, out) == (2, "")

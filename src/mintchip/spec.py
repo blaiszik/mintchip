@@ -284,9 +284,9 @@ class Chip:
             warnings=self.warnings_for(domain),
         )
 
-    def markdown(self, *, compact: bool = False) -> str:
+    def markdown(self, *, compact: bool = False, ascii: bool = False) -> str:
         """The text form in a code span."""
-        t = self.text(compact=compact)
+        t = self.text(ascii=ascii, compact=compact)
         return f"`` {t} ``" if "`" in t else f"`{t}`"
 
     def to_dict(self) -> dict[str, Any]:

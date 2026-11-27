@@ -46,6 +46,9 @@ OUT = GALLERY / "output"
 README = ROOT / "README.md"
 GALLERY_README = GALLERY / "README.md"
 WRAP = 80  # terminal width for wrapped prose
+REPO = "blaiszik/mintchip"
+RAW_BASE = f"https://raw.githubusercontent.com/{REPO}/main"
+BLOB_BASE = f"https://github.com/{REPO}/blob/main"
 
 # ================================================================================================
 # Content. Inputs are written here; every output is computed from them.
@@ -527,15 +530,23 @@ def _num(v: float) -> str:
     return "0" if s in ("-0", "") else s
 
 
-def _style() -> str:
-    """Light and dark colours for a composed image, taken from mintchip.css()."""
+def _style(theme: str = "auto") -> str:
+    """Light, dark, or auto colours for a composed image, taken from mintchip.css()."""
     css = mc.css()
     light = re.search(r"^:root\{([^}]*)\}", css)
     dark = re.search(r"prefers-color-scheme:dark\)\{:root\{([^}]*)\}", css)
     assert light and dark, "mintchip.css() no longer declares :root colours"
+    if theme == "light":
+        scheme = f"svg{{color:{LIGHT_INK};{light[1]}}}"
+    elif theme == "dark":
+        scheme = f"svg{{color:{DARK_INK};{dark[1]}}}"
+    else:
+        scheme = (
+            f"svg{{color:{LIGHT_INK};{light[1]}}}"
+            f"@media (prefers-color-scheme:dark){{svg{{color:{DARK_INK};{dark[1]}}}}}"
+        )
     return (
-        f"<style>svg{{color:{LIGHT_INK};{light[1]}}}"
-        f"@media (prefers-color-scheme:dark){{svg{{color:{DARK_INK};{dark[1]}}}}}"
+        f"<style>{scheme}"
         "text{fill:currentColor}.m{fill-opacity:.66}.b{font-weight:600}"
         ".r{stroke:currentColor;stroke-opacity:.4;stroke-width:1}</style>"
     )
@@ -825,13 +836,13 @@ class Sheet:
             else:
                 self.text(raw.strip(), x0, base, cls=cls)
 
-    def svg(self, title: str) -> str:
+    def svg(self, title: str, *, theme: str = "auto") -> str:
         w, h = max(self.width, 1.0), self.y
         return (
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{_num(w + 2)}" height="{_num(h)}" '
             f'viewBox="-1 0 {_num(w + 2)} {_num(h)}" font-family="{FONT}" font-size="{_num(FS)}" '
             f'role="img" aria-label="{html.escape(title, quote=True)}">'
-            f"<title>{html.escape(title)}</title>{_style()}{''.join(self.parts)}</svg>\n"
+            f"<title>{html.escape(title)}</title>{_style(theme)}{''.join(self.parts)}</svg>\n"
         )
 
 
@@ -873,7 +884,7 @@ def pair_outputs(slug: str) -> dict[str, Any]:
     }  # fmt: skip
 
 
-def pair_image(slug: str) -> str:
+def pair_image(slug: str, *, theme: str = "auto") -> str:
     o = pair_outputs(slug)
     sheet = Sheet()
     for para in o["paragraphs"]:
@@ -881,7 +892,34 @@ def pair_image(slug: str) -> str:
     sheet.gap(0.8 * FS)
     sheet.table(o["table"])
     sheet.gap(2)
-    return sheet.svg(f"{PAIRS[slug]['title']}, rendered as HTML by mintchip")
+    return sheet.svg(f"{PAIRS[slug]['title']}, rendered as HTML by mintchip", theme=theme)
+
+
+def picture_html(light_rel: str, dark_rel: str, alt: str, *, inline: bool = False) -> str:
+    """Theme-aware ``<picture>`` using absolute raw GitHub URLs.
+
+    GitHub switches light/dark via ``<source media="(prefers-color-scheme: ...)">``, while PyPI
+    strips ``<picture>``/``<source>`` and renders the light-ink fallback ``<img>`` cleanly on its
+    white background even when the reader's OS is in Dark Mode.
+    """
+    light_url = f"{RAW_BASE}/{light_rel}"
+    dark_url = f"{RAW_BASE}/{dark_rel}"
+    esc_alt = html.escape(alt, quote=True)
+    if inline:
+        return (
+            "<picture>"
+            f'<source media="(prefers-color-scheme: dark)" srcset="{dark_url}">'
+            f'<source media="(prefers-color-scheme: light)" srcset="{light_url}">'
+            f'<img alt="{esc_alt}" src="{light_url}">'
+            "</picture>"
+        )
+    return (
+        "<picture>\n"
+        f'  <source media="(prefers-color-scheme: dark)" srcset="{dark_url}">\n'
+        f'  <source media="(prefers-color-scheme: light)" srcset="{light_url}">\n'
+        f'  <img alt="{esc_alt}" src="{light_url}">\n'
+        "</picture>"
+    )
 
 
 def para(s: str) -> str:
@@ -897,11 +935,22 @@ def para(s: str) -> str:
     return "\n".join([*lines, cur])
 
 
-def pair_markdown(slug: str, image: str, *, heading: str | None = None) -> str:
+def pair_markdown(
+    slug: str,
+    image: str,
+    *,
+    heading: str | None = None,
+    picture: tuple[str, str] | None = None,
+) -> str:
     """Before as text; after as the HTML render (an image), then as it prints in a terminal."""
     o = pair_outputs(slug)
     head = f"### {heading}\n\n" if heading else ""
     title = PAIRS[slug]["title"]
+    img_md = (
+        picture_html(picture[0], picture[1], f"{title}, rendered as HTML")
+        if picture is not None
+        else f"![{title}, rendered as HTML]({image})"
+    )
     return (
         f"{head}**Before**: the report as an agent usually writes it.\n\n"
         f"```text\n{o['before']}\n```\n\n"
@@ -910,7 +959,7 @@ def pair_markdown(slug: str, image: str, *, heading: str | None = None) -> str:
             "(`--format html`) in your light or dark theme,"
         )
         + "\n\n"
-        f"![{title}, rendered as HTML]({image})\n\n"
+        f"{img_md}\n\n"
         f"and as it prints in a terminal:\n\n```text\n{o['after']}\n```\n\n"
         "<details><summary>The two commands that wrote it</summary>\n\n"
         f"```text\n{o['commands']}\n```\n\n</details>"
@@ -973,7 +1022,14 @@ def python_session(lines: list[str]) -> str:
 
 def readme_blocks() -> dict[str, str]:
     blocks: dict[str, str] = {}
-    blocks["hero"] = pair_markdown("experiment", "gallery/output/pairs/experiment.svg")
+    blocks["hero"] = pair_markdown(
+        "experiment",
+        f"{RAW_BASE}/gallery/output/pairs/experiment_light.svg",
+        picture=(
+            "gallery/output/pairs/experiment_light.svg",
+            "gallery/output/pairs/experiment_dark.svg",
+        ),
+    )
 
     one = ["spark", *map(str, LOSS["retrieval"]), "--band", "0.38:0.48"]
     message = (
@@ -1009,9 +1065,20 @@ def readme_blocks() -> dict[str, str]:
     for entry in mc.CATALOG:
         k = entry["name"]
         c = mc.REGISTRY[k].example_chip()
-        img = f"![{k}](gallery/output/chips/{k}.svg)" if has_svg(k) else "—"
+        img = (
+            picture_html(
+                f"gallery/output/chips/{k}_light.svg",
+                f"gallery/output/chips/{k}_dark.svg",
+                k,
+                inline=True,
+            )
+            if has_svg(k)
+            else "—"
+        )
         text = c.text(compact=True).replace("|", "\\|")
-        lines.append(f"| {entry['have']} | [`{k}`](gallery/README.md#{k}) | {img} | `{text}` |")
+        lines.append(
+            f"| {entry['have']} | [`{k}`]({BLOB_BASE}/gallery/README.md#{k}) | {img} | `{text}` |"
+        )
     lines.append("| Three or more of the same thing | `mintchip table` | | |")
     blocks["catalog"] = "\n".join(lines)
 
@@ -1137,7 +1204,7 @@ def index_html() -> str:
         ]
         b += _render_html(p["prose"])
         out, _ = mintchip(["table", "-", *p["args"], "--format", "html"], rows_json(p["rows"]))
-        b += [out, _pre(o["commands"])]  # fmt: skip
+        b += [table_markup(out), _pre(o["commands"])]  # fmt: skip
     b.append("<h2>Recipes for coding agents</h2>")
     for title, why, shown in recipe_blocks():
         b += [f"<h3>{html.escape(title)}</h3>", f"<p>{_md_inline(why)}</p>", _pre(shown)]
@@ -1153,7 +1220,7 @@ def index_html() -> str:
         if entry:
             out, _ = mintchip(["table", "-", *entry["args"], "--format", "html"],
                               rows_json(entry["rows"]))  # fmt: skip
-            b.append(out)
+            b.append(table_markup(out))
         b.append(_pre(example_transcript(kind)))
         for title, _, shown, chip in edge_blocks(kind):
             b += [f"<p><b>{html.escape(title)}.</b> {chip.html()}</p>", _pre(shown)]
@@ -1225,10 +1292,18 @@ def outputs() -> dict[Path, str]:
     files: dict[Path, str] = {}
     for s in PAIRS:
         files[OUT / "pairs" / f"{s}.svg"] = pair_image(s)
+    files[OUT / "pairs" / "experiment_light.svg"] = pair_image("experiment", theme="light")
+    files[OUT / "pairs" / "experiment_dark.svg"] = pair_image("experiment", theme="dark")
     for kind in kinds():
         c = mc.REGISTRY[kind].example_chip()
         if has_svg(kind):
             files[OUT / "chips" / f"{kind}.svg"] = c.svg(standalone=True) + "\n"
+            files[OUT / "chips" / f"{kind}_light.svg"] = (
+                c.svg(theme="light", standalone=True) + "\n"
+            )
+            files[OUT / "chips" / f"{kind}_dark.svg"] = (
+                c.svg(theme="dark", standalone=True) + "\n"
+            )
         files[OUT / "cards" / f"{kind}.svg"] = chip_card(kind)
         for _, fname, _, chip in edge_blocks(kind):
             if has_svg(kind) and chip.svg():

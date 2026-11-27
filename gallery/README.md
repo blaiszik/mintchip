@@ -180,7 +180,7 @@ $ mintchip delta 212 151 --unit ms --no-higher-is-better --label p50
 
 ```text
 $ mintchip timeline install=12 collect=9 test=61 report=12
-94 s (test 65%) █▏█▏███████▏█
+94 s (test 65%) █▏█▏██████▏█
 ```
 
 **Context budget.** Tokens used out of the window; past the total, the bar says so:
@@ -537,7 +537,7 @@ Edge cases:
 
   ```text
   $ mintchip share a=30 b=20 c=15 d=10 e=8 f=7 g=5 h=5
-  30·20·15·35% ███▏██▏██▏███ other=5
+  30·20·15·35% ███▏██▏█▏███ other=5
   mintchip: warning: 5 parts beyond the largest 3 are folded into one 'other' segment (35%), drawn last (marked other=5).
   ```
 - **In the given order.** ![In the given order](output/edge/share-in-the-given-order.svg)
