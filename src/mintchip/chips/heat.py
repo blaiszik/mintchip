@@ -13,7 +13,15 @@ import math
 
 from .. import fmt
 from ..render.svg_base import Canvas
-from ..render.text_base import SHADES, TRACK, Segment, TextOptions, TextOut
+from ..render.text_base import (
+    SHADES,
+    TRACK,
+    Segment,
+    TextOptions,
+    TextOut,
+    braille_cell,
+    braille_level_mask,
+)
 from ..scales import downsample_minmax, padded
 from ..spec import (
     Built,
@@ -138,11 +146,10 @@ def _cuts(chip: Chip, domain: tuple[float, float], own: bool) -> list[str]:
     return _cut_lines(chip.stats["values"], chip.unit, domain)
 
 
-def _shade(v: float, lo: float, hi: float) -> tuple[str, str | None]:
+def _shade(v: float, lo: float, hi: float) -> tuple[str, str]:
     t = 0.5 if hi <= lo else min(1.0, max(0.0, (v - lo) / (hi - lo)))
     idx = min(3, max(0, round(t * 3)))
-    role = "context" if idx == 0 else "accent" if idx == 3 else None
-    return SHADES[idx], role
+    return SHADES[idx], f"ramp:{t:.3f}"
 
 
 # --- text -----------------------------------------------------------------------------------
@@ -166,8 +173,36 @@ def _text(chip: Chip, o: TextOptions) -> TextOut:
         value = f(lo_val, chip.unit)
 
     d_lo, d_hi = o.domain
-    sampled = downsample_minmax(s["values"], CELLS)
     glyph: list[Segment] = []
+    if o.braille and not o.ascii:
+        braille_slots = CELLS * 2
+        sampled = downsample_minmax(s["values"], braille_slots)
+        for i in range(0, len(sampled), 2):
+            v0 = sampled[i]
+            v1 = sampled[i + 1] if i + 1 < len(sampled) else None
+            if v0 is None and v1 is None:
+                ch, role = TRACK, "context"
+            else:
+                mask = 0
+                ts: list[float] = []
+                for col, v in ((0, v0), (1, v1)):
+                    if v is None:
+                        continue
+                    t = 0.5 if d_hi <= d_lo else min(1.0, max(0.0, (v - d_lo) / (d_hi - d_lo)))
+                    ts.append(t)
+                    h = min(4, max(1, round(t * 3) + 1))
+                    mask |= braille_level_mask(col, h)
+                ch = braille_cell(mask)
+                role = f"ramp24:{max(ts):.3f}"
+            if glyph and glyph[-1][1] == role:
+                glyph[-1] = (glyph[-1][0] + ch, role)
+            else:
+                glyph.append((ch, role))
+        if len(s["values"]) > braille_slots:
+            glyph.append((f" n={len(s['values'])}", None))
+        return TextOut(value, glyph, dec)
+
+    sampled = downsample_minmax(s["values"], CELLS)
     for v in sampled:
         ch, role = (TRACK, "context") if v is None else _shade(v, d_lo, d_hi)
         if glyph and glyph[-1][1] == role:

@@ -14,7 +14,16 @@ import math
 
 from .. import fmt
 from ..render.svg_base import Canvas
-from ..render.text_base import REF, TRACK, Segment, TextOptions, TextOut, level
+from ..render.text_base import (
+    REF,
+    TRACK,
+    Segment,
+    TextOptions,
+    TextOut,
+    braille_cell,
+    braille_level_mask,
+    level,
+)
 from ..scales import padded, quantile
 from ..spec import (
     Built,
@@ -233,18 +242,44 @@ def _text(chip: Chip, o: TextOptions) -> TextOut:
     peak = max(counts) if any(counts) else 1
 
     cells: list[Segment] = []
-    for k in counts:
-        if k == 0:
-            cells.append((TRACK, "context"))
-        else:
-            role = "accent" if k == peak else None
-            cells.append((level(k, 0, peak), role))
-
     ref = s["reference"]
-    if ref is not None and lo <= ref <= hi:
-        r_idx = min(s["bins"] - 1, int((ref - lo) / (hi - lo) * s["bins"]))
-        if counts[r_idx] == 0:
-            cells[r_idx] = (REF, "context")
+    if o.braille and not o.ascii:
+        r_idx = (
+            min(s["bins"] - 1, int((ref - lo) / (hi - lo) * s["bins"]))
+            if ref is not None and lo <= ref <= hi
+            else -1
+        )
+        for i in range(0, len(counts), 2):
+            k0 = counts[i]
+            k1 = counts[i + 1] if i + 1 < len(counts) else 0
+            ref_here = r_idx in (i, i + 1)
+            if k0 == 0 and k1 == 0:
+                cells.append((REF if ref_here else braille_cell(0), "context"))
+                continue
+            h0 = max(1, min(4, round(k0 / peak * 4))) if k0 > 0 else 0
+            h1 = max(1, min(4, round(k1 / peak * 4))) if k1 > 0 else 0
+            mask = braille_level_mask(0, h0) | braille_level_mask(1, h1)
+            role = "accent" if (k0 == peak or k1 == peak) else None
+            if ref_here and r_idx == i:
+                cells.append((REF, "context"))
+                cells.append((braille_cell(mask), role))
+            elif ref_here and r_idx == i + 1:
+                cells.append((braille_cell(mask), role))
+                cells.append((REF, "context"))
+            else:
+                cells.append((braille_cell(mask), role))
+    else:
+        for k in counts:
+            if k == 0:
+                cells.append((TRACK, "context"))
+            else:
+                role = "accent" if k == peak else None
+                cells.append((level(k, 0, peak), role))
+
+        if ref is not None and lo <= ref <= hi:
+            r_idx = min(s["bins"] - 1, int((ref - lo) / (hi - lo) * s["bins"]))
+            if counts[r_idx] == 0:
+                cells[r_idx] = (REF, "context")
 
     below = any(v < lo for v in s["samples"])
     above = any(v > hi for v in s["samples"])

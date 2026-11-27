@@ -149,7 +149,14 @@ class Table:
         return (*out, *self._layout(ascii=False, color=False)[1])
 
     # --- text ---------------------------------------------------------------------------------
-    def text(self, *, ascii: bool = False, color: bool = False, width: int = WIDTH) -> str:
+    def text(
+        self,
+        *,
+        ascii: bool = False,
+        color: bool = False,
+        width: int = WIDTH,
+        braille: bool = False,
+    ) -> str:
         """Aligned monospace: a header, one rule, one line per row; at most ``width`` characters
         wide where it can be (text columns are shortened first)."""
         if isinstance(width, bool) or not isinstance(width, int) or width < 1:
@@ -157,7 +164,7 @@ class Table:
                 f"mintchip.Table.text: width must be a whole number of 1 or more; got {width!r}.",
                 fix_hint="Pass width=80 or width=120.",
             )
-        return self._layout(ascii=ascii, color=color, width=width)[0]
+        return self._layout(ascii=ascii, color=color, width=width, braille=braille)[0]
 
     def __str__(self) -> str:
         return self.text()
@@ -165,9 +172,11 @@ class Table:
     def __repr__(self) -> str:
         return f"<Table {len(self.rows)} rows × {len(self.columns)} columns>"
 
-    def _blocks(self, ascii: bool, color: bool) -> list[_Block]:
+    def _blocks(self, ascii: bool, color: bool, braille: bool = False) -> list[_Block]:
         return [
-            self._text_block(j, ascii) if c.kind == "text" else self._chip_block(j, ascii, color)
+            self._text_block(j, ascii)
+            if c.kind == "text"
+            else self._chip_block(j, ascii, color, braille)
             for j, c in enumerate(self.columns)
         ]
 
@@ -176,9 +185,9 @@ class Table:
         cells = [dash if r[j] is None else _tx(str(r[j]), ascii) for r in self.rows]
         return _Block(_tx(self.columns[j].header, ascii), [(c, c) for c in cells], text=True)
 
-    def _chip_block(self, j: int, ascii: bool, color: bool) -> _Block:
+    def _chip_block(self, j: int, ascii: bool, color: bool, braille: bool = False) -> _Block:
         col = self.columns[j]
-        parts = [self._parts(j, r[j], ascii, color) for r in self.rows]
+        parts = [self._parts(j, r[j], ascii, color, braille) for r in self.rows]
         values = _align([None if p is None else p[0] for p in parts], ascii)
         glyphs = _align_glyphs(col.kind, [("", "") if p is None else p[1:] for p in parts])
         gw = max((len(g) for g, _ in glyphs), default=0)
@@ -196,15 +205,21 @@ class Table:
                 block.scale = " " * (vw + 1) + scale
         return block
 
-    def _parts(self, j: int, cell: Cell, ascii: bool, color: bool) -> tuple[str, str, str] | None:
+    def _parts(
+        self, j: int, cell: Cell, ascii: bool, color: bool, braille: bool = False
+    ) -> tuple[str, str, str] | None:
         """(compact value, plain glyph, rendered glyph) for one chip cell."""
         if not isinstance(cell, Chip):
             return None
         d = self._domain_for(j, cell)
-        glyph = cell.text(value=False, ascii=ascii, domain=d)
+        glyph = cell.text(value=False, ascii=ascii, domain=d, braille=braille)
         dec = self.decimals[j] if cell.kind == self.columns[j].kind else None
         value = cell.value(compact=True, ascii=ascii, decimals=dec)
-        rendered = cell.text(value=False, ascii=ascii, color=True, domain=d) if color else glyph
+        rendered = (
+            cell.text(value=False, ascii=ascii, color=True, domain=d, braille=braille)
+            if color
+            else glyph
+        )
         return value, glyph, rendered
 
     def _scale(self, j: int, glyphs: list[tuple[str, str]], ascii: bool) -> str:
@@ -244,8 +259,10 @@ class Table:
                     line[a : a + len(label)] = label
         return "".join(line).rstrip()
 
-    def _layout(self, *, ascii: bool, color: bool, width: int = WIDTH) -> tuple[str, list[str]]:
-        blocks = self._blocks(ascii, color)
+    def _layout(
+        self, *, ascii: bool, color: bool, width: int = WIDTH, braille: bool = False
+    ) -> tuple[str, list[str]]:
+        blocks = self._blocks(ascii, color, braille)
         notes: list[str] = []
         roles = [self._row_role(i) for i in range(len(self.rows))]
         gutter = 2 if any(hi or base for hi, base in roles) else 0
@@ -308,10 +325,10 @@ class Table:
         return "\n".join(line.rstrip() for line in lines), notes
 
     # --- markdown -----------------------------------------------------------------------------
-    def markdown(self, *, ascii: bool = False) -> str:
+    def markdown(self, *, ascii: bool = False, braille: bool = False) -> str:
         """A GFM table: text cells as text, chip cells as their compact text in code spans,
         values padded so the glyphs line up in a monospace code font."""
-        blocks = self._blocks(ascii, False)
+        blocks = self._blocks(ascii, False, braille)
         dash = EMPTY_ASCII if ascii else EMPTY
         head, rule = [], []
         for j, (col, b) in enumerate(zip(self.columns, blocks, strict=True)):

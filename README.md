@@ -147,6 +147,7 @@ git diff --numstat | mintchip from git-diff             # share chip of changed 
 mintchip from hyperfine bench.json --format md          # shared-scale dist + mean table
 mintchip from junit results.xml                         # pass/fail strip per suite
 mintchip diff main.json pr.json --fail-on-regression 5  # delta + CI forest plot (exit 1 on regression)
+mintchip table runs.json --braille --theme mint_dark --format ansi  # 2×4 Braille + 24-bit ANSI table
 mintchip render report.txt --format html --fragment     # embeddable HTML fragment (no <html> shell)
 mintchip doctor                                         # check UTF-8, ANSI, and Unicode/ASCII glyphs
 ```

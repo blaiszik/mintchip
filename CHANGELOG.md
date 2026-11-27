@@ -4,6 +4,13 @@ All notable changes to `mintchip` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once 1.0 is reached.
 
+## [0.2.2] - 2026-11-27
+
+### Added
+- **Optional 2×4 inline Braille rendering (`braille=True` / `--braille`):** High-resolution Braille glyphs for `spark`, `hist`, `bullet`, and `heat` across `Chip.text()`, `Table.text()`, and every `mintchip` CLI command (cleanly overridden by `--ascii`; default `braille=False` unchanged).
+- **CLI `--theme` flag & 24-bit ANSI mint palette:** Pass `--theme auto|light|dark|mono|mint|mint_dark` across `render`, `table`, `diff`, `from`, and chip subcommands, emitting crisp 24-bit ANSI true-color ramps in `--format ansi`.
+- Synced `skills/mintchip/SKILL.md`, `llms.txt`, and `README.md`.
+
 ## [0.2.1] - 2026-11-27
 
 ### Added

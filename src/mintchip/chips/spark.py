@@ -18,7 +18,17 @@ import math
 
 from .. import fmt
 from ..render.svg_base import Canvas
-from ..render.text_base import TRACK, TextOptions, TextOut, level
+from ..render.text_base import (
+    BRAILLE_COL,
+    REF,
+    TRACK,
+    Segment,
+    TextOptions,
+    TextOut,
+    braille_cell,
+    braille_row,
+    level,
+)
 from ..scales import downsample_minmax, padded
 from ..spec import (
     Built,
@@ -226,6 +236,66 @@ def _text(chip: Chip, o: TextOptions) -> TextOut:
                 TRACK if v is None else "^" if v > hi else "v" if v < lo else level(v, lo, hi)
             )
         return "".join(out)
+
+    if o.braille and not o.ascii:
+        braille_points = CELLS * 2
+
+        def braille_cells(series: list[float | None]) -> str:
+            sampled = downsample_minmax(series, braille_points)
+            out: list[str] = []
+            for i in range(0, len(sampled), 2):
+                v0 = sampled[i]
+                v1 = sampled[i + 1] if i + 1 < len(sampled) else None
+                pair = [v for v in (v0, v1) if v is not None]
+                if not pair:
+                    out.append(TRACK)
+                    continue
+                if any(v > hi for v in pair):
+                    out.append("^")
+                    continue
+                if any(v < lo for v in pair):
+                    out.append("v")
+                    continue
+                mask = 0
+                if v0 is not None:
+                    mask |= BRAILLE_COL[0][braille_row(v0, lo, hi)]
+                if v1 is not None:
+                    mask |= BRAILLE_COL[1][braille_row(v1, lo, hi)]
+                out.append(braille_cell(mask))
+            return "".join(out)
+
+        run = braille_cells(s["values"])
+        glyph: list[Segment] = (
+            [(run[:-1], None), (run[-1], _end_role(chip))]
+            if len(run) > 1
+            else [(run, _end_role(chip))]
+        )
+        if s["vs"] is not None:
+            glyph.append((" " + braille_cells(s["vs"]), "context"))
+        hint_mask = 0
+        band = s["band"]
+        if band is not None:
+            b_lo, b_hi = max(band[0], lo), min(band[1], hi)
+            if b_lo <= b_hi:
+                r_top = braille_row(b_hi, lo, hi)
+                r_bot = braille_row(b_lo, lo, hi)
+                for r in range(r_top, r_bot + 1):
+                    hint_mask |= BRAILLE_COL[0][r]
+        ref = s["reference"]
+        if ref is not None and lo <= ref <= hi:
+            r_ref = braille_row(ref, lo, hi)
+            if hint_mask:
+                hint_mask |= BRAILLE_COL[1][r_ref]
+            else:
+                hint_mask |= BRAILLE_COL[0][r_ref] | BRAILLE_COL[1][r_ref]
+        if hint_mask:
+            glyph.append((REF + braille_cell(hint_mask), "context"))
+        zoom = _zoom((lo, hi))
+        if zoom:
+            glyph.append((f" ±{zoom}", None))
+        if len(s["values"]) > braille_points:
+            glyph.append((f" n={len(s['values'])}", None))
+        return TextOut(value, glyph, dec)
 
     run = cells(s["values"])
     glyph = [(run[:-1], None), (run[-1], _end_role(chip))]

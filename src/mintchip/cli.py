@@ -28,9 +28,15 @@ from .directives import (
     metavar,
     parse_tokens,
 )
+from .render.text_base import ansi_theme, braille_mode
 from .spec import REGISTRY, Chip, ChipError, Param
+from .themes import THEMES
 
 FORMATS = ("text", "ansi", "md", "svg", "html", "json")
+THEME_NAMES = tuple(THEMES)
+_THEME_HELP = (
+    f"Colour theme for svg, html and ansi: {', '.join(THEME_NAMES)} (default: auto)."
+)
 OUTPUT = (
     Param(
         "format",
@@ -39,7 +45,15 @@ OUTPUT = (
         default="text",
         choices=FORMATS,
     ),
+    Param(
+        "theme",
+        "string",
+        _THEME_HELP,
+        default="auto",
+        choices=THEME_NAMES,
+    ),
     Param("ascii", "bool", "Print pure ASCII.", default=False),
+    Param("braille", "bool", "Use high-res 2×4 Braille glyphs (ignored with --ascii).", default=False),
     Param("compact", "bool", "Shorten the value for use mid-sentence.", default=False),
     Param("strict", "bool", "Exit 1 if the chip has warnings.", default=False),
     Param("out", "string", "Write output to FILE instead of stdout."),
@@ -138,24 +152,53 @@ def _read(path: str) -> str:
 
 
 # --- kind commands --------------------------------------------------------------------------
-def chip_output(c: Chip, *, format: str = "text", ascii: bool = False, compact: bool = False):
+def _normalize_theme(theme: str) -> str:
+    norm = theme.strip().lower().replace("-", "_")
+    if norm in THEMES:
+        return norm
+    close = difflib.get_close_matches(norm, THEME_NAMES, n=1, cutoff=0.5)
+    hint = f"Use --theme {close[0]}." if close else f"Use one of: {', '.join(THEME_NAMES)}."
+    raise ChipError(f"mintchip: unknown theme {theme!r}.", fix_hint=hint)
+
+
+def _html_scheme(theme: str) -> str | None:
+    return {
+        "dark": "dark",
+        "mint_dark": "dark",
+        "light": "light",
+        "mint": "light",
+        "mono": "light",
+    }.get(theme)
+
+
+def chip_output(
+    c: Chip,
+    *,
+    format: str = "text",
+    ascii: bool = False,
+    compact: bool = False,
+    theme: str = "auto",
+    braille: bool = False,
+):
     """The text a kind command prints for ``c`` in ``format``."""
     fmt_name = _normalize_format(format, FORMATS)
+    theme_name = _normalize_theme(theme)
     if fmt_name == "text":
-        return c.text(ascii=ascii, compact=compact)
+        return c.text(ascii=ascii, compact=compact, braille=braille)
     if fmt_name == "ansi":
-        return c.text(ascii=ascii, compact=compact, color=True)
+        with ansi_theme(theme_name):
+            return c.text(ascii=ascii, compact=compact, color=True, braille=braille)
     if fmt_name == "md":
-        return _code_span(c.text(ascii=ascii, compact=compact))
+        return _code_span(c.text(ascii=ascii, compact=compact, braille=braille))
     if fmt_name == "svg":
-        svg = c.svg(standalone=True)
+        svg = c.svg(theme=theme_name, standalone=True)
         if not svg:
             raise ChipError(
                 f"mintchip.{c.kind} has no graphic.", fix_hint="Use --format text, md or html."
             )
         return svg
     if fmt_name == "html":
-        return c.html()
+        return c.html(theme=theme_name)
     if fmt_name == "json":
         return json.dumps({**c.summary(), "spec": c.to_dict()}, indent=2, ensure_ascii=ascii)
     raise _bad_format(format, FORMATS)
@@ -194,8 +237,16 @@ def _cmd_kind(kind: str, tokens: Sequence[str]) -> int:
         kw = parse_tokens(kind, norm_tokens, extra=OUTPUT, style="cli")
         opts = {p.name: kw.pop(p.name, p.default) for p in OUTPUT}
         fmt_name = _normalize_format(opts["format"], FORMATS)
+        theme_name = _normalize_theme(opts["theme"])
         c = REGISTRY[kind].fn(**kw)
-        text = chip_output(c, format=fmt_name, ascii=opts["ascii"], compact=opts["compact"])
+        text = chip_output(
+            c,
+            format=fmt_name,
+            ascii=opts["ascii"],
+            compact=opts["compact"],
+            theme=theme_name,
+            braille=opts["braille"],
+        )
         _write_output(text, opts["out"])
     except ChipError as e:
         return _error(e, example)
@@ -208,16 +259,20 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
     try:
         fmt_name = _normalize_format(args.format, ("text", "ansi", "md", "html"))
+        theme_name = _normalize_theme(getattr(args, "theme", "auto"))
         text = _read(args.file)
         title = args.title or (Path(args.file).stem if args.file != "-" else "mintchip")
-        out, found = directives.render(
-            text,
-            format=fmt_name,
-            ascii=args.ascii,
-            compact=args.compact,
-            title=title,
-            fragment=args.fragment,
-        )
+        use_braille = bool(getattr(args, "braille", False) and not args.ascii)
+        with ansi_theme(theme_name), braille_mode(use_braille):
+            out, found = directives.render(
+                text,
+                format=fmt_name,
+                ascii=args.ascii,
+                compact=args.compact,
+                title=title,
+                theme=theme_name,
+                fragment=args.fragment,
+            )
         _write_output(out, args.out, raw=(fmt_name != "html"))
     except ChipError as e:
         return _error(e)
@@ -363,6 +418,7 @@ def _table_rows(path: str) -> Any:
 def _cmd_table(args: argparse.Namespace) -> int:
     try:
         fmt_name = _normalize_format(args.format, ("text", "ansi", "md", "html", "json"))
+        theme_name = _normalize_theme(getattr(args, "theme", "auto"))
         columns = table_columns(args.col, args.set)
         t = mc.table(
             _table_rows(args.file),
@@ -374,27 +430,138 @@ def _cmd_table(args: argparse.Namespace) -> int:
             highlight=args.highlight or None,
             baseline=args.baseline,
         )
+        use_braille = bool(getattr(args, "braille", False) and not args.ascii)
         if fmt_name == "json":
             text = json.dumps(t.to_dict(), indent=2, ensure_ascii=args.ascii)
         elif fmt_name == "md":
-            text = t.markdown(ascii=args.ascii)
+            text = t.markdown(ascii=args.ascii, braille=use_braille)
         elif fmt_name == "html":
+            table_html = t.html(theme=theme_name)
             if args.fragment:
-                text = t.html()
+                text = table_html
             else:
                 from .render import html as _html_mod
 
                 text = _html_mod._shell(
                     t.title or "mintchip",
-                    f'<div class="mc-wide">{t.html()}</div>',
-                    None,
+                    f'<div class="mc-wide">{table_html}</div>',
+                    _html_scheme(theme_name),
                 )
         else:
-            text = t.text(ascii=args.ascii, color=fmt_name == "ansi", width=args.width)
+            with ansi_theme(theme_name):
+                text = t.text(
+                    ascii=args.ascii,
+                    color=fmt_name == "ansi",
+                    width=args.width,
+                    braille=use_braille,
+                )
         _write_output(text, args.out)
     except ChipError as e:
         return _error(e, TABLE_EXAMPLE)
     return _warn(t.warnings, args.strict)
+
+
+def _cmd_diff_with_theme(args: argparse.Namespace) -> int:
+    import html as _html
+
+    from . import diff as _diff
+
+    try:
+        theme_name = _normalize_theme(getattr(args, "theme", "auto"))
+        fmt_name = _normalize_format(args.format, _diff.OUTPUT_FORMATS)
+    except ChipError as e:
+        return _error(e, "mintchip diff base.json head.json")
+
+    if fmt_name != "html" or theme_name == "auto":
+        use_braille = bool(getattr(args, "braille", False) and not getattr(args, "ascii", False))
+        with ansi_theme(theme_name), braille_mode(use_braille):
+            return _diff.cmd_diff(args)
+
+    if args.fail_on_regression is not None and args.fail_on_regression < 0:
+        return _error(
+            ChipError(
+                f"mintchip diff: --fail-on-regression must be >= 0; got {args.fail_on_regression}.",
+                fix_hint="Pass a non-negative percentage, e.g. --fail-on-regression 5.",
+            )
+        )
+    hib: bool | None = True if args.higher_is_better else False if args.lower_is_better else None
+    try:
+        base_entries = _diff.load_benchmark_entries(_read(args.base), source=args.base)
+        head_entries = _diff.load_benchmark_entries(_read(args.head), source=args.head)
+        res = _diff.diff_benchmarks(
+            base_entries,
+            head_entries,
+            higher_is_better=hib,
+            fail_on_regression=args.fail_on_regression,
+            title=args.title,
+            ci_gate=not args.no_ci_gate,
+        )
+        tbl_html = res.table.html(theme=theme_name)
+        takeaway = res.takeaway
+        if args.fragment:
+            out = f'{tbl_html}\n<p class="mc-takeaway">{_html.escape(takeaway)}</p>'
+        else:
+            from .render import html as _html_mod
+
+            body = (
+                f'<div class="mc-wide">{tbl_html}</div>\n'
+                f'<p class="mc-takeaway">{_html.escape(takeaway)}</p>'
+            )
+            out = _html_mod._shell(
+                res.table.title or "mintchip diff", body, _html_scheme(theme_name)
+            )
+        _write_output(out, args.out)
+    except ChipError as e:
+        return _error(e, "mintchip diff base.json head.json")
+
+    warn_code = _warn(res.warnings, args.strict)
+    if res.failed:
+        names = ", ".join(
+            f"{r.name} ({_diff._format_pct(r.pct_change)})" for r in res.regressions
+        )
+        _err(
+            f"mintchip: diff: regression exceeded {res.fail_threshold:g}% threshold: {names}"
+        )
+        return 1
+    return warn_code
+
+
+def _cmd_from_with_theme(args: argparse.Namespace) -> int:
+    import importlib
+
+    _ingest = importlib.import_module("mintchip.ingest")
+
+    try:
+        theme_name = _normalize_theme(getattr(args, "theme", "auto"))
+        fmt_name = _normalize_format(args.format, _ingest.OUTPUT_FORMATS)
+    except ChipError as e:
+        return _error(e, "mintchip from auto bench.json")
+
+    if fmt_name != "html" or theme_name == "auto":
+        use_braille = bool(getattr(args, "braille", False) and not getattr(args, "ascii", False))
+        with ansi_theme(theme_name), braille_mode(use_braille):
+            return _ingest.cmd_from(args)
+
+    try:
+        raw = _read(args.file)
+        obj = _ingest.ingest(raw, fmt=args.source_format, title=args.title)
+        from .render import html as _html_mod
+
+        scheme = _html_scheme(theme_name)
+        if isinstance(obj, Chip):
+            chip_html = obj.html(theme=theme_name, label=not args.fragment, compact=args.fragment)
+            out = chip_html if args.fragment else _html_mod._shell(obj.alt, f"<p>{chip_html}</p>", scheme)
+        else:
+            tbl_html = obj.html(theme=theme_name)
+            out = (
+                tbl_html
+                if args.fragment
+                else _html_mod._shell(obj.title or "mintchip", f'<div class="mc-wide">{tbl_html}</div>', scheme)
+            )
+        _write_output(out, args.out)
+    except ChipError as e:
+        return _error(e, "mintchip from auto bench.json")
+    return _warn(obj.warnings, args.strict)
 
 
 # --- schema ---------------------------------------------------------------------------------
@@ -478,9 +645,12 @@ def _cmd_schema(args: argparse.Namespace) -> int:
 # --- catalog and guide ----------------------------------------------------------------------
 def _cmd_catalog(args: argparse.Namespace) -> int:
     rows = []
+    use_braille = bool(getattr(args, "braille", False) and not args.ascii)
     for entry in mc.CATALOG:
         example = mc.REGISTRY[entry["name"]].example_chip()
-        rows.append({**entry, "spec": example.to_dict(), "text": example.text(ascii=args.ascii)})
+        rows.append(
+            {**entry, "spec": example.to_dict(), "text": example.text(ascii=args.ascii, braille=use_braille)}
+        )
     if args.json:
         _out(json.dumps(rows, indent=2, ensure_ascii=args.ascii))
         return 0
@@ -560,7 +730,7 @@ def _kind_parser(sub: Any, kind: str) -> None:
         elif param.type == "bool":
             out.add_argument(flag, action="store_true", help=_pct(param.help))
         else:
-            out.add_argument(flag, metavar="FORMAT", help=_pct(param.help))
+            out.add_argument(flag, metavar=param.name.upper(), help=_pct(param.help))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -591,7 +761,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("file", nargs="?", default="-", metavar="FILE", help="Prose file; - is stdin.")
     p.add_argument("--format", default="text",
                    help="text (default), ansi, md (or markdown) or html (a full page).")  # fmt: skip
+    p.add_argument("--theme", default="auto", metavar="THEME", help=_THEME_HELP)
     p.add_argument("--ascii", action="store_true", help="Pure ASCII chips.")
+    p.add_argument(
+        "--braille",
+        action="store_true",
+        help="Use high-res 2×4 Braille glyphs (ignored with --ascii).",
+    )
     p.add_argument("--compact", action="store_true", help="Shorter chip values.")
     p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
     p.add_argument("--check", action="store_true", help="Also lint density to stderr.")
@@ -642,10 +818,16 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Target width for text output (default: 80).")  # fmt: skip
     p.add_argument("--format", default="text",
                    help="text (default), ansi, md (or markdown), html or json.")  # fmt: skip
+    p.add_argument("--theme", default="auto", metavar="THEME", help=_THEME_HELP)
     p.add_argument("--fragment", action="store_true",
                    help="Emit bare HTML without the page shell (for --format html).")  # fmt: skip
     p.add_argument("-o", "--out", metavar="FILE", help="Write output to FILE instead of stdout.")
     p.add_argument("--ascii", action="store_true", help="Pure ASCII.")
+    p.add_argument(
+        "--braille",
+        action="store_true",
+        help="Use high-res 2×4 Braille glyphs (ignored with --ascii).",
+    )
     p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
     p.set_defaults(func=_cmd_table, _parser=p)
 
@@ -662,6 +844,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("catalog", help="List every chip with its example rendered as text.")
     p.add_argument("--ascii", action="store_true", help="Print pure ASCII.")
+    p.add_argument(
+        "--braille",
+        action="store_true",
+        help="Use high-res 2×4 Braille glyphs (ignored with --ascii).",
+    )
     p.add_argument("--json", action="store_true", help="Print the catalog as JSON.")
     p.set_defaults(func=_cmd_catalog, _parser=p)
 
@@ -670,8 +857,24 @@ def build_parser() -> argparse.ArgumentParser:
     from . import skill as _skill
     from .ingest import add_from_parser as _add_from_parser
 
-    _add_from_parser(sub, _Help)
-    _diff.add_diff_parser(sub, _Help)
+    from_p = _add_from_parser(sub, _Help)
+    from_p.add_argument("--theme", default="auto", metavar="THEME", help=_THEME_HELP)
+    from_p.add_argument(
+        "--braille",
+        action="store_true",
+        help="Use high-res 2×4 Braille glyphs (ignored with --ascii).",
+    )
+    from_p.set_defaults(func=_cmd_from_with_theme, _parser=from_p)
+
+    diff_p = _diff.add_diff_parser(sub, _Help)
+    diff_p.add_argument("--theme", default="auto", metavar="THEME", help=_THEME_HELP)
+    diff_p.add_argument(
+        "--braille",
+        action="store_true",
+        help="Use high-res 2×4 Braille glyphs (ignored with --ascii).",
+    )
+    diff_p.set_defaults(func=_cmd_diff_with_theme, _parser=diff_p)
+
     _skill.add_skill_parser(sub, _Help)
     _doctor.add_doctor_parser(sub, _Help)
 

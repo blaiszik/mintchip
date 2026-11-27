@@ -29,7 +29,7 @@ from typing import Any
 
 from .render import html as _html
 from .render.svg_base import SIZES, Canvas, svg_root
-from .render.text_base import TextOptions, TextOut, ansi, plain, to_ascii
+from .render.text_base import TextOptions, TextOut, ansi, is_braille_mode, plain, to_ascii
 from .themes import resolve_theme
 
 __all__ = [
@@ -161,7 +161,12 @@ class Chip:
         return self.domain
 
     def _text_out(
-        self, ascii: bool, compact: bool, domain: Any, decimals: int | None = None
+        self,
+        ascii: bool,
+        compact: bool,
+        domain: Any,
+        decimals: int | None = None,
+        braille: bool = False,
     ) -> TextOut:
         render = self._kind.text
         if render is None:
@@ -172,7 +177,11 @@ class Chip:
                 fix_hint="Pass decimals=2, or leave it out for the chip's own precision.",
             )
         o = TextOptions(
-            ascii=ascii, compact=compact, domain=self._domain(domain), decimals=decimals
+            ascii=ascii,
+            compact=compact,
+            domain=self._domain(domain),
+            decimals=decimals,
+            braille=bool((braille or is_braille_mode()) and not ascii),
         )
         return render(self, o)
 
@@ -185,11 +194,13 @@ class Chip:
         color: bool = False,
         domain: Any = None,
         decimals: int | None = None,
+        braille: bool = False,
     ) -> str:
         """``"{value} {glyph}"``. ``ascii`` is pure ASCII, ``compact`` shortens the value,
         ``color`` adds ANSI colour by ink role, ``domain`` imposes a shared scale, ``decimals``
-        sets the decimal places of the primary value (kinds whose value is a decimal number)."""
-        out = self._text_out(ascii, compact, domain, decimals)
+        sets the decimal places of the primary value (kinds whose value is a decimal number), and
+        ``braille`` requests high-res 2×4 inline Braille glyphs (ignored when ``ascii=True``)."""
+        out = self._text_out(ascii, compact, domain, decimals, braille)
         glyph = ansi(out.glyph, ascii=ascii) if color else plain(out.glyph, ascii=ascii)
         if not value:
             return glyph
@@ -284,9 +295,9 @@ class Chip:
             warnings=self.warnings_for(domain),
         )
 
-    def markdown(self, *, compact: bool = False, ascii: bool = False) -> str:
+    def markdown(self, *, compact: bool = False, ascii: bool = False, braille: bool = False) -> str:
         """The text form in a code span."""
-        t = self.text(ascii=ascii, compact=compact)
+        t = self.text(ascii=ascii, compact=compact, braille=braille)
         return f"`` {t} ``" if "`" in t else f"`{t}`"
 
     def to_dict(self) -> dict[str, Any]:

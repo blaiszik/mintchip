@@ -93,7 +93,7 @@ if omitted); `ci` cells take `[est, lo, hi]`; columns share scales. `--set KEY.O
 - `mintchip diff base.json head.json --fail-on-regression 5` compares runs with 95% CI noise gating.
 
 ## Output & errors
-Use `--format md` for Markdown/PRs (code spans) and `--format text` for terminals (`ansi`, `html`,
-`svg`, `json`, `--ascii`, `--compact`, `-o FILE`). Errors go to stderr (`fix:`, exit 2); warnings
-exit 1 with `--strict`. Not on PATH? Use `uvx mintchip` or `python -m mintchip`.
-More: `mintchip doctor`, `mintchip skill`, `mintchip schema`, `mintchip catalog`.
+`--format md` (Markdown/PRs), `text` (default), `ansi`, `html`, `svg`, `json`; flags `--braille`,
+`--theme mint|mint_dark`, `--ascii`, `--compact`, `-o FILE`. Errors→stderr (`fix:`, exit 2);
+warnings exit 1 with `--strict`. No PATH? `uvx mintchip` / `python -m mintchip`.
+More: `doctor`, `skill`, `schema`, `catalog`.

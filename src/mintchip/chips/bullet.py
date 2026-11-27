@@ -14,7 +14,16 @@ import itertools
 
 from .. import fmt
 from ..render.svg_base import Canvas
-from ..render.text_base import REF, TRACK, Segment, TextOptions, TextOut, hbar
+from ..render.text_base import (
+    BRAILLE_COL,
+    REF,
+    TRACK,
+    Segment,
+    TextOptions,
+    TextOut,
+    braille_cell,
+    hbar,
+)
 from ..spec import (
     Built,
     Chip,
@@ -209,6 +218,13 @@ def _formatter(s: dict, unit: str | None, dec: int | None = None):
     return lambda v: fmt.num(v, unit=unit)
 
 
+def _band_index(mid_val: float, bands: list[float]) -> int:
+    for i, hi in enumerate(bands):
+        if mid_val <= hi:
+            return i
+    return len(bands) - 1
+
+
 def _band_char(mid_val: float, bands: list[float]) -> str:
     for i, hi in enumerate(bands):
         if mid_val <= hi:
@@ -248,6 +264,47 @@ def _text(chip: Chip, o: TextOptions) -> TextOut:
     lo, hi = o.domain
     span = hi - lo
     scale = CELLS / span
+
+    if o.braille and not o.ascii:
+        n_sub = CELLS * 2
+        sub_scale = n_sub / span
+        fill_subs = round(max(0.0, min(s["value"], hi) - lo) * sub_scale)
+        end_cells = max(1, round(max(0.0, min(s["total"], hi) - lo) * scale))
+        t = s["target"]
+        t_sub = min(n_sub - 1, int((t - lo) * sub_scale)) if lo <= t <= hi else -1
+
+        glyph: list[Segment] = []
+        for cell_i in range(end_cells):
+            mask = 0
+            has_fill = False
+            has_target = False
+            for col in (0, 1):
+                sub = cell_i * 2 + col
+                if sub == t_sub:
+                    bits = BRAILLE_COL[col]
+                    mask |= bits[0] | bits[1] | bits[2] | bits[3]
+                    has_target = True
+                if sub < fill_subs:
+                    bits = BRAILLE_COL[col]
+                    mask |= bits[1] | bits[2]
+                    has_fill = True
+                elif sub != t_sub:
+                    mid_val = lo + (sub + 0.5) / sub_scale
+                    b_idx = _band_index(mid_val, s["ranges"])
+                    if b_idx == 0 or (b_idx == 1 and col == 0):
+                        mask |= BRAILLE_COL[col][3]
+            if mask == 0:
+                mask = BRAILLE_COL[1][3]
+            ch = braille_cell(mask)
+            role = None if has_target else ("accent" if has_fill else "context")
+            if glyph and glyph[-1][1] == role:
+                glyph[-1] = (glyph[-1][0] + ch, role)
+            else:
+                glyph.append((ch, role))
+        if s["value"] > min(s["total"], hi):
+            glyph.append((OVER, None))
+        return TextOut(value, glyph, dec)
+
     cells = max(0.0, min(s["value"], hi) - lo) * scale
     fill = "█" * round(cells) if o.ascii else hbar(cells)
     end = round(max(0.0, min(s["total"], hi) - lo) * scale)
