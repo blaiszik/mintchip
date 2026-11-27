@@ -406,6 +406,64 @@ CHIPS: dict[str, dict[str, Any]] = {
              ["funnel", "visited=1200", "signed=520", "activated=560"]),
         ],
     },
+    "bullet": {
+        "sentence": "SLA attainment reached {chip}.",
+        "rows": [
+            {"service": "api", "sla": [0.94, 0.9]},
+            {"service": "search", "sla": [0.82, 0.9]},
+            {"service": "ingest", "sla": [0.58, 0.9]},
+        ],
+        "args": ["--col", "service", "--col", "sla:bullet:SLA attainment"],
+        "edges": [
+            ("Custom qualitative ranges",
+             ["bullet", "240", "280", "--ranges", "150", "225", "300", "--unit", "req/s"]),
+            ("Over the scale maximum", ["bullet", "1.12", "0.9"]),
+        ],
+    },
+    "heat": {
+        "sentence": "Hourly p95 latency spanned {chip}.",
+        "rows": [
+            {"region": "us-east", "p95": [12, 18, 34, 68, 95, 78, 40, 18]},
+            {"region": "eu-west", "p95": [15, 22, 48, 82, 74, 52, 28, 16]},
+            {"region": "ap-south", "p95": [20, 35, 58, 64, 52, 38, 26, 22]},
+        ],
+        "args": ["--col", "region", "--col", "p95:heat:hourly p95", "--set", "p95.unit=ms"],
+        "edges": [
+            ("24-hour strip",
+             ["heat", "8", "6", "5", "5", "6", "9", "18", "34", "56", "72", "84", "91",
+              "95", "88", "82", "79", "85", "92", "74", "52", "36", "24", "16", "11",
+              "--unit", "ms"]),
+            ("Missing slots", ["heat", "10", "null", "45", "90", "30", "--unit", "ms"]),
+        ],
+    },
+    "hist": {
+        "sentence": "Response latency shaped as {chip}.",
+        "rows": [
+            {"endpoint": "/search", "lat": [18, 19, 20, 20, 21, 22, 26, 31]},
+            {"endpoint": "/rank", "lat": [22, 24, 25, 25, 26, 28, 29, 30]},
+            {"endpoint": "/embed", "lat": [12, 13, 14, 14, 28, 29, 30, 31]},
+        ],
+        "args": ["--col", "endpoint", "--col", "lat:hist:latency", "--set", "lat.unit=ms"],
+        "edges": [
+            ("Bimodal sample with reference",
+             ["hist", "10", "11", "11", "12", "12", "24", "25", "25", "26", "27",
+              "--bins", "6", "--reference", "18", "--unit", "ms"]),
+            ("Missing samples", ["hist", "18", "null", "20", "21", "nan", "25", "--unit", "ms"]),
+        ],
+    },
+    "status": {
+        "sentence": "CI checks finished at {chip}.",
+        "rows": [
+            {"suite": "unit", "ci": [142, 4, 2]},
+            {"suite": "integration", "ci": [48, 0, 1]},
+            {"suite": "e2e", "ci": [19, 1, 0]},
+        ],
+        "args": ["--col", "suite", "--col", "ci:status:checks"],
+        "edges": [
+            ("Single failure in 1,000 checks", ["status", "999", "1", "0"]),
+            ("All skipped", ["status", "0", "0", "12"]),
+        ],
+    },
 }
 
 # fmt: on

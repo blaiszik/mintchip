@@ -25,6 +25,7 @@ __all__ = [
     "LO_END",
     "REF",
     "RULE",
+    "SHADES",
     "TRACK",
     "Glyph",
     "Segment",
@@ -43,6 +44,7 @@ __all__ = [
 # --- the Unicode tier's whole alphabet (CONTRACT section 5) ---------------------------------
 LEVELS = "▁▂▃▄▅▆▇█"  # eight heights, for runs of values
 EIGHTHS = "▏▎▍▌▋▊▉█"  # left-aligned partial cells, for lengths
+SHADES = "░▒▓█"  # four density steps, for heatmaps and stacked status bars
 TRACK = "·"  # an empty cell on an axis, or a missing value in a run
 RULE = "─"  # a span along an axis
 REF = "│"  # a reference position on an axis
@@ -50,11 +52,12 @@ CROSS = "┼"  # a reference position inside a span
 LO_END, HI_END = "├", "┤"  # the two ends of a span
 DOT, HOLLOW = "●", "○"  # a point; hollow when it is not distinguishable from the reference
 GAP = "▏"  # thin separator between parts of a whole
-ALLOWED = frozenset(LEVELS + EIGHTHS + "─│├┤┼●○·−→±×")
+ALLOWED = frozenset(LEVELS + EIGHTHS + SHADES + "─│├┤┼●○·−→±×")
 
 # Transliteration applied to every character of ``text(ascii=True)``.
 ASCII: dict[str, str] = {
     **dict(zip(LEVELS, "_.-~=+*#", strict=True)),
+    "░": ".", "▒": ":", "▓": "=",
     "▏": "|", "▎": "|", "▍": "|", "▌": "|", "▋": "#", "▊": "#", "▉": "#",
     "·": ".", "─": "-", "│": "|", "┼": "+", "├": "(", "┤": ")", "●": "*", "○": "o",
     "−": "-", "→": "->", "±": "+/-", "×": "x",

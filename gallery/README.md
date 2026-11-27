@@ -692,4 +692,131 @@ Edge cases:
   1,200 → 520 → 560! (47%)
   mintchip: warning: stage 'activated' (560) is larger than 'signed' (520); marked ! in text and outlined in SVG.
   ```
+
+<a id="bullet"></a>
+### `bullet`: How does a value compare against its target and qualitative bands?
+
+You have: a value against target & bands.
+
+![bullet in a sentence and in a table](output/cards/bullet.svg)
+
+```text
+$ mintchip bullet 0.82 0.9 --label 'SLA attainment'
+82% (target 90%) ██████▌│
+$ mintchip bullet 0.82 0.9 --label 'SLA attainment' --ascii
+82% (target 90%) #######|
+$ mintchip bullet 0.82 0.9 --label 'SLA attainment' --compact
+82% ██████▌│
+```
+
+Edge cases:
+
+- **Custom qualitative ranges.** ![Custom qualitative ranges](output/edge/bullet-custom-qualitative-ranges.svg)
+
+  ```text
+  $ mintchip bullet 240 280 --ranges 150 225 300 --unit req/s
+  240 req/s (target 280 req/s) ██████▍│
+  ```
+- **Over the scale maximum.** ![Over the scale maximum](output/edge/bullet-over-the-scale-maximum.svg)
+
+  ```text
+  $ mintchip bullet 1.12 0.9
+  112% (target 90%) ████████+
+  mintchip: warning: value 112% exceeds the scale; the bar fills the track and is marked + in text and by a chevron in SVG.
+  ```
+
+<a id="heat"></a>
+### `heat`: How does intensity vary across ordered slots?
+
+You have: intensity across slots.
+
+![heat in a sentence and in a table](output/cards/heat.svg)
+
+```text
+$ mintchip heat 12 24 68 95 78 30 15 --label 'Hourly p95' --unit ms
+12 to 95 ms ░░▓█▓▒░
+$ mintchip heat 12 24 68 95 78 30 15 --label 'Hourly p95' --unit ms --ascii
+12 to 95 ms ..=#=:.
+$ mintchip heat 12 24 68 95 78 30 15 --label 'Hourly p95' --unit ms --compact
+12 to 95 ms ░░▓█▓▒░
+```
+
+Edge cases:
+
+- **24-hour strip.** ![24-hour strip](output/edge/heat-24-hour-strip.svg)
+
+  ```text
+  $ mintchip heat 8 6 5 5 6 9 18 34 56 72 84 91 95 88 82 79 85 92 74 52 36 24 16 11 --unit ms
+  5 to 95 ms ░░░░░░░▒▓▓█████▓██▓▓▒▒░░
+  ```
+- **Missing slots.** ![Missing slots](output/edge/heat-missing-slots.svg)
+
+  ```text
+  $ mintchip heat 10 null 45 90 30 --unit ms
+  10 to 90 ms ░·▒█▒
+  mintchip: warning: 1 missing slot(s) shown as gaps.
+  ```
+
+<a id="hist"></a>
+### `hist`: What is the shape, skew or modality of a sample?
+
+You have: sample shape (histogram).
+
+![hist in a sentence and in a table](output/cards/hist.svg)
+
+```text
+$ mintchip hist 18 19 20 20 21 22 26 31 --label Latency --unit ms
+med 20.5 ms (n=8, 18 to 31) ▆█▃·▃··▃
+$ mintchip hist 18 19 20 20 21 22 26 31 --label Latency --unit ms --ascii
+med 20.5 ms (n=8, 18 to 31) +#-.-..-
+$ mintchip hist 18 19 20 20 21 22 26 31 --label Latency --unit ms --compact
+med 20.5 ms ▆█▃·▃··▃
+```
+
+Edge cases:
+
+- **Bimodal sample with reference.** ![Bimodal sample with reference](output/edge/hist-bimodal-sample-with-reference.svg)
+
+  ```text
+  $ mintchip hist 10 11 11 12 12 24 25 25 26 27 --bins 6 --reference 18 --unit ms
+  med 18 ms (n=10, 10 to 27) █·│·▂▇
+  ```
+- **Missing samples.** ![Missing samples](output/edge/hist-missing-samples.svg)
+
+  ```text
+  $ mintchip hist 18 null 20 21 nan 25 --unit ms
+  med 20.5 ms (n=4, 18 to 25) █·██···█
+  mintchip: warning: 2 missing sample(s) skipped; n=4 counts the rest.
+  ```
+
+<a id="status"></a>
+### `status`: How many checks passed, failed or were skipped?
+
+You have: pass, fail & skip counts.
+
+![status in a sentence and in a table](output/cards/status.svg)
+
+```text
+$ mintchip status 142 4 2 --label 'CI tests'
+142/148 pass (4 fail, 2 skip) ███████▓░
+$ mintchip status 142 4 2 --label 'CI tests' --ascii
+142/148 pass (4 fail, 2 skip) #######=.
+$ mintchip status 142 4 2 --label 'CI tests' --compact
+142/148 pass ███████▓░
+```
+
+Edge cases:
+
+- **Single failure in 1,000 checks.** ![Single failure in 1,000 checks](output/edge/status-single-failure-in-1-000-checks.svg)
+
+  ```text
+  $ mintchip status 999 1 0
+  999/1,000 pass (1 fail) ████████▓
+  ```
+- **All skipped.** ![All skipped](output/edge/status-all-skipped.svg)
+
+  ```text
+  $ mintchip status 0 0 12
+  all 12 skipped ░░░░░░░░░
+  ```
 <!-- END mintchip:chips -->

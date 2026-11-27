@@ -1,0 +1,3 @@
+text: med 20.5 ms (n=8, 18 to 31) ▆█▃·▃··▃
+ascii: med 20.5 ms (n=8, 18 to 31) +#-.-..-
+compact: med 20.5 ms ▆█▃·▃··▃

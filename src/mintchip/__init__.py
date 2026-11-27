@@ -13,16 +13,20 @@ from typing import Any
 
 from . import chips as _chips  # noqa: F401  (registers every chip kind found in chips/)
 from .chips.bar import bar
+from .chips.bullet import bullet
 from .chips.ci import ci
 from .chips.delta import delta
 from .chips.dist import dist
 from .chips.funnel import funnel
 from .chips.gauge import gauge
+from .chips.heat import heat
+from .chips.hist import hist
 from .chips.num import num
 from .chips.rank import rank
 from .chips.ratio import ratio
 from .chips.share import share
 from .chips.spark import spark
+from .chips.status import status
 from .chips.strip import strip
 from .chips.timeline import timeline
 from .chips.waterfall import waterfall
@@ -90,6 +94,7 @@ __all__ = [
     "Theme",
     "__version__",
     "bar",
+    "bullet",
     "ci",
     "contrast_ratio",
     "css",
@@ -101,6 +106,8 @@ __all__ = [
     "from_dict",
     "funnel",
     "gauge",
+    "heat",
+    "hist",
     "ingest",
     "install_skill",
     "lint",
@@ -113,6 +120,7 @@ __all__ = [
     "share",
     "shared_domain",
     "spark",
+    "status",
     "strip",
     "table",
     "timeline",

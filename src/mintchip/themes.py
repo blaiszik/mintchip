@@ -1,4 +1,4 @@
-"""Ink roles and the four themes (auto, light, dark, mono).
+"""Ink roles and the six themes (auto, light, dark, mono, mint, mint_dark).
 
 A theme says how each ink role is painted. It never names a background: chips paint no
 background, so the reader's surface shows through. In the ``auto`` theme, ``ink`` is
@@ -59,6 +59,8 @@ THEMES: dict[str, Theme] = {
     "light": Theme("light", LIGHT_INK, _ACCENT, _GOOD, _BAD, _WARN),
     "dark": Theme("dark", DARK_INK, _ACCENT, _GOOD, _BAD, _WARN),
     "mono": Theme("mono", "#111111", "#111111", "#111111", "#111111", "#111111"),
+    "mint": Theme("mint", LIGHT_INK, "#0D8366", "#1E7D54", "#C83E4D", "#8A4B76"),
+    "mint_dark": Theme("mint_dark", DARK_INK, "#3DD6A8", "#52D18A", "#F07178", "#D68FD6"),
 }
 
 

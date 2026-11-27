@@ -266,7 +266,13 @@ def document(
             )
     if source:
         parts.append(f'<footer class="mc-src">Source: {html.escape(source)}</footer>')
-    scheme = {"dark": "dark", "light": "light", "mono": "light"}.get(name)
+    scheme = {
+        "dark": "dark",
+        "mint_dark": "dark",
+        "light": "light",
+        "mint": "light",
+        "mono": "light",
+    }.get(name)
     return _shell(title or "mintchip", "\n".join(parts), scheme, accent=accent, compact=compact)
 
 

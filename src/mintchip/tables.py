@@ -463,7 +463,13 @@ class Table:
                         raise ChipError(
                             f"mintchip.Table.save: {e}.", fix_hint="Use theme='auto'."
                         ) from None
-                    scheme = {"dark": "dark", "light": "light", "mono": "light"}.get(name)
+                    scheme = {
+                        "dark": "dark",
+                        "mint_dark": "dark",
+                        "light": "light",
+                        "mint": "light",
+                        "mono": "light",
+                    }.get(name)
                     content = _html_mod._shell(
                         self.title or "mintchip",
                         f'<div class="mc-wide">{table_html}</div>',

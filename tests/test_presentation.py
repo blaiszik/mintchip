@@ -39,7 +39,7 @@ EPS = 0.01
 MARKS = ("path", "circle", "rect", "line", "polyline", "polygon", "ellipse")
 CONTEXT = {CONTEXT_OPACITY, MARK_OPACITY, WASH_OPACITY, BAND_OPACITY}
 # Kinds whose data is itself a state (pass/warn/fail) or a declared normal range.
-STATUS_KINDS = {"strip", "gauge"}
+STATUS_KINDS = {"strip", "gauge", "status"}
 MAX_MARK_KINDS = 3
 
 # Real violations found by this lint, as (check, specimen id) -> reason. Each is a strict

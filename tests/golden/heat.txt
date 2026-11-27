@@ -1,0 +1,3 @@
+text: 12 to 95 ms ░░▓█▓▒░
+ascii: 12 to 95 ms ..=#=:.
+compact: 12 to 95 ms ░░▓█▓▒░
