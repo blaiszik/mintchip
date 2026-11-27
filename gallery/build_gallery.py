@@ -1272,9 +1272,16 @@ def documents() -> dict[Path, str]:
     }
 
 
+PROMO_ASSETS = frozenset({"opener.gif"})  # rendered by promo/demo-video/make_gif.py
+
+
 def stale(files: dict[Path, str]) -> list[Path]:
     """Files under gallery/output that the build would not write."""
-    return sorted(p for p in OUT.rglob("*") if p.is_file() and p not in files)
+    return sorted(
+        p
+        for p in OUT.rglob("*")
+        if p.is_file() and p not in files and p.relative_to(OUT).as_posix() not in PROMO_ASSETS
+    )
 
 
 def build(*, check: bool = False) -> list[str]:

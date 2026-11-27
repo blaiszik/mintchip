@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mintchip"
-version = "0.2.0.dev0"
+version = "0.2.0"
 description = "Word-sized graphics for the numbers in an agent's report: sparklines, intervals, before/after and pass/fail chips in text, Markdown or HTML, from one shell command."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -52,6 +52,7 @@ packages = ["src/mintchip"]
 include = [
     "src",
     "tests",
+    "evals",
     "gallery",
     "scripts",
     "skills",

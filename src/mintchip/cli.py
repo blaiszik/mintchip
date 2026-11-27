@@ -43,7 +43,7 @@ OUTPUT = (
     Param("compact", "bool", "Shorten the value for use mid-sentence.", default=False),
     Param("strict", "bool", "Exit 1 if the chip has warnings.", default=False),
 )
-COMMANDS = ("render", "table", "guide", "schema", "catalog")
+COMMANDS = ("render", "table", "from", "diff", "guide", "skill", "doctor", "schema", "catalog")
 TABLE_EXAMPLE = "mintchip table results.json --col model --col acc:bar --col lift:ci --sort acc"
 
 
@@ -164,7 +164,12 @@ def _cmd_render(args: argparse.Namespace) -> int:
     title = args.title or (Path(args.file).stem if args.file != "-" else "mintchip")
     try:
         out, found = directives.render(
-            text, format=args.format, ascii=args.ascii, compact=args.compact, title=title
+            text,
+            format=args.format,
+            ascii=args.ascii,
+            compact=args.compact,
+            title=title,
+            fragment=args.fragment,
         )
     except ChipError as e:
         return _error(e)
@@ -280,25 +285,35 @@ def table_columns(cols: Sequence[str], sets: Sequence[str]) -> dict[str, Any] | 
 
 
 def _table_rows(path: str) -> Any:
-    """A path ``mintchip.table`` can read, or rows parsed from stdin (JSON or CSV)."""
+    """A path ``mintchip.table`` can read, or rows parsed from stdin (JSON, JSONL, CSV or TSV)."""
     if path != "-":
         if not Path(path).is_file():
             raise ChipError(
                 f"mintchip table: no such file {path!r}.",
-                fix_hint="Pass a .json (list of objects) or .csv file, or - for stdin.",
+                fix_hint="Pass a .json, .jsonl, .csv or .tsv file, or - for stdin.",
             )
         return path
     text = _read("-")
-    if text.lstrip()[:1] in ("[", "{"):
+    stripped = text.lstrip()
+    if stripped[:1] in ("[", "{"):
         try:
             return json.loads(text)
         except json.JSONDecodeError as e:
+            lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+            if stripped[:1] == "{" and len(lines) > 1:
+                try:
+                    return [json.loads(ln) for ln in lines]
+                except json.JSONDecodeError:
+                    pass
             raise ChipError(
                 f"mintchip table: stdin is not valid JSON (line {e.lineno}, column {e.colno}: "
                 f"{e.msg}).",
                 fix_hint='Pass a list of objects, e.g. [{"model": "a", "acc": 0.82}].',
             ) from None
-    return list(csv.DictReader(text.splitlines()))
+    lines = text.splitlines()
+    if lines and "\t" in lines[0] and "," not in lines[0]:
+        return list(csv.DictReader(lines, delimiter="\t"))
+    return list(csv.DictReader(lines))
 
 
 def _cmd_table(args: argparse.Namespace) -> int:
@@ -311,6 +326,8 @@ def _cmd_table(args: argparse.Namespace) -> int:
             descending=False if args.asc else True if args.desc else None,
             limit=args.limit,
             title=args.title,
+            highlight=args.highlight or None,
+            baseline=args.baseline,
         )
         if args.format == "json":
             text = json.dumps(t.to_dict(), indent=2, ensure_ascii=args.ascii)
@@ -319,7 +336,7 @@ def _cmd_table(args: argparse.Namespace) -> int:
         elif args.format == "html":
             text = t.html()
         else:
-            text = t.text(ascii=args.ascii, color=args.format == "ansi")
+            text = t.text(ascii=args.ascii, color=args.format == "ansi", width=args.width)
     except ChipError as e:
         return _error(e, TABLE_EXAMPLE)
     _out(text)
@@ -520,13 +537,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--strict", action="store_true", help="Exit 1 on any warning.")
     p.add_argument("--check", action="store_true", help="Also lint density to stderr.")
     p.add_argument("--title", help="Page title for --format html.")
+    p.add_argument("--fragment", action="store_true",
+                   help="Emit embeddable HTML without the page shell (for --format html).")  # fmt: skip
     p.set_defaults(func=_cmd_render, _parser=p)
 
     p = sub.add_parser(
         "table",
-        help="Render rows from a JSON or CSV file as a table with shared scales.",
+        help="Render rows from a JSON, JSONL, CSV or TSV file as a table with shared scales.",
         description=(
-            "Rows come from a .json file (a list of objects), a .csv file, or stdin (-).\n"
+            "Rows come from a .json (list of objects), .jsonl, .csv or .tsv file, or stdin (-).\n"
             "Each --col KEY[:KIND[:HEADER]] adds a column in order; KIND is a chip kind or\n"
             "text, inferred from the values if left out. A cell is a number, a list for the\n"
             "kind's values (ci takes [estimate, low, high]) or an object of arguments. Every\n"
@@ -536,7 +555,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=f"example:\n  $ {TABLE_EXAMPLE} --set acc.target=0.9",
         formatter_class=_Help,
     )
-    p.add_argument("file", metavar="FILE", help="A .json or .csv file; - is stdin.")
+    p.add_argument("file", metavar="FILE", help="A .json, .jsonl, .csv or .tsv file; - is stdin.")
     p.add_argument("--col", action="append", default=[], metavar="KEY[:KIND[:HEADER]]",
                    help="Add a column; repeat in display order. No --col: every key.")  # fmt: skip
     p.add_argument("--set", action="append", default=[], metavar="KEY.OPTION=VALUE",
@@ -549,6 +568,12 @@ def build_parser() -> argparse.ArgumentParser:
     order.add_argument("--desc", action="store_true", help="Sort largest first (Z to A for text).")
     p.add_argument("--limit", type=int, metavar="N", help="Keep the first N rows after sorting.")
     p.add_argument("--title", help="A title above the table.")
+    p.add_argument("--highlight", action="append", default=[], metavar="ROW",
+                   help="Emphasise a row matching ROW in the first text column (repeatable).")  # fmt: skip
+    p.add_argument("--baseline", metavar="ROW",
+                   help="Mark a row matching ROW as the baseline.")  # fmt: skip
+    p.add_argument("--width", type=int, default=80, metavar="N",
+                   help="Target width for text output (default: 80).")  # fmt: skip
     p.add_argument("--format", choices=("text", "ansi", "md", "html", "json"), default="text",
                    help="text (default), ansi, md, html or json.")  # fmt: skip
     p.add_argument("--ascii", action="store_true", help="Pure ASCII.")
@@ -570,6 +595,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--ascii", action="store_true", help="Print pure ASCII.")
     p.add_argument("--json", action="store_true", help="Print the catalog as JSON.")
     p.set_defaults(func=_cmd_catalog, _parser=p)
+
+    from . import diff as _diff
+    from . import doctor as _doctor
+    from . import ingest as _ingest
+    from . import skill as _skill
+
+    _ingest.add_from_parser(sub, _Help)
+    _diff.add_diff_parser(sub, _Help)
+    _skill.add_skill_parser(sub, _Help)
+    _doctor.add_doctor_parser(sub, _Help)
 
     for entry in mc.CATALOG:
         _kind_parser(sub, entry["name"])

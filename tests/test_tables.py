@@ -38,8 +38,17 @@ def test_columns_share_one_scale_in_text() -> None:
 
 
 def test_values_align_on_the_decimal_point() -> None:
-    t = mc.table([{"x": 12.5}, {"x": 0.25}, {"x": 130}, {"x": None}], {"x": "num"})
-    assert _body(t.text()) == [" 12.50", "  0.25", "130.00", "  —"]
+    t = mc.table([{"x": 12.5}, {"x": 1.25}, {"x": 13}, {"x": None}], {"x": "num"})
+    assert _body(t.text()) == ["12.50", " 1.25", "13.00", " —"]
+    wide = mc.table([{"x": 12.5}, {"x": 0.25}, {"x": 130}, {"x": None}], {"x": "num"})
+    assert _body(wide.text()) == [" 12.5", "  0.25", "130", "  —"], (
+        "columns spanning >= 100x keep integers crisp while aligning on the decimal point"
+    )
+    bench = mc.table(
+        [{"n": "small", "ms": 1.92}, {"n": "medium", "ms": 18.4}, {"n": "large", "ms": 212}],
+        {"n": "text", "ms": {"chip": "num", "unit": "ms"}},
+    )
+    assert "212 ms" in bench.text() and "212.00" not in bench.text() and "1.92 ms" in bench.text()
     t = mc.table([{"x": 12.5}, {"x": 130}], {"x": {"chip": "num", "unit": "s"}})
     assert _body(t.text()) == [" 12.5 s", "130.0 s"], "with a unit, right-aligned"
 
@@ -217,3 +226,134 @@ def test_bars_with_different_totals_keep_their_own_scale() -> None:
     assert "███████▋" in e2e and "████████" in unit
     same = mc.table([{"p": [90, 200]}, {"p": [150, 200]}], {"p": "bar"}).text().splitlines()[-2:]
     assert "███▋" in same[0] and "██████" in same[1], "equal totals still compare by length"
+
+
+def test_mixed_bar_column_keeps_count_wording_for_one_of_one() -> None:
+    rows = [
+        {"s": "e2e", "p": [38, 40]},
+        {"s": "smoke", "p": [1, 1]},
+        {"s": "unit", "p": [1840, 1850]},
+    ]
+    t = mc.table(rows, {"s": "text", "p": "bar"})
+    txt = t.text()
+    assert "38/40" in txt and "1/1" in txt and "1,840/1,850" in txt and "100%" not in txt
+    assert "1/1" in t.markdown() and "1/1" in t.html()
+    assert mc.Table.from_dict(json.loads(json.dumps(t.to_dict()))).text() == txt
+
+    pcts = mc.table([{"p": 0.82}, {"p": 1.0}], {"p": "bar"}).text()
+    assert "82%" in pcts and "100%" in pcts
+    forced = mc.table(rows, {"s": "text", "p": {"chip": "bar", "percent": True}}).text()
+    assert "95%" in forced and "100%" in forced
+
+
+def test_text_width_parameter() -> None:
+    long_name = "experiment-configuration-alpha-beta-gamma-delta"
+    rows = [{"name": long_name, "acc": 0.82, "lift": (0.08, 0.05, 0.11)}]
+    cols = {"name": "text", "acc": "bar", "lift": "ci"}
+    t = mc.table(rows, cols)
+    assert "…" in t.text(width=60) and max(len(ln) for ln in t.text(width=60).splitlines()) <= 60
+    wide = t.text(width=120)
+    assert long_name in wide and "…" not in wide
+    for bad in (0, -10, True, "80"):
+        with pytest.raises(mc.ChipError, match="width"):
+            t.text(width=bad)  # type: ignore[arg-type]
+
+
+def test_table_save_every_format(tmp_path) -> None:
+    t = mc.table(ROWS, COLS, title="Runs")
+    out_html = t.save(tmp_path / "t.html")
+    html_text = (tmp_path / "t.html").read_text(encoding="utf-8")
+    assert out_html["rows"] == 3 and out_html["columns"] == ["model", "acc", "lift", "loss"]
+    assert html_text.startswith("<!doctype html>") and mc.css() in html_text
+    assert '<table class="mc-table"' in html_text and "<h1>" not in html_text
+
+    t.save(tmp_path / "frag.html", fragment=True)
+    frag_text = (tmp_path / "frag.html").read_text(encoding="utf-8")
+    assert frag_text.startswith('<table class="mc-table"') and "<!doctype" not in frag_text.lower()
+
+    t.save(tmp_path / "compact.html", compact=True, accent="#2563EB")
+    compact_text = (tmp_path / "compact.html").read_text(encoding="utf-8")
+    assert "mc-compact" in compact_text and "--mc-accent:#2563EB" in compact_text
+
+    t.save(tmp_path / "t.md")
+    assert (tmp_path / "t.md").read_text(encoding="utf-8") == t.markdown() + "\n"
+
+    t.save(tmp_path / "t.txt", ascii=True, width=100)
+    assert (tmp_path / "t.txt").read_text(encoding="utf-8") == t.text(ascii=True, width=100) + "\n"
+
+    t.save(tmp_path / "t.json", indent=2)
+    loaded = mc.Table.from_dict(json.loads((tmp_path / "t.json").read_text(encoding="utf-8")))
+    assert loaded.text() == t.text()
+
+    assert t._repr_html_().startswith(f"<style>{mc.css()}</style><table")
+
+    with pytest.raises(mc.ChipError, match="unsupported extension"):
+        t.save(tmp_path / "t.png")
+    with pytest.raises(mc.ChipError, match="Table.save"):
+        t.save(tmp_path / "t.txt", bogus=1)
+
+
+def test_highlight_and_baseline_row_emphasis() -> None:
+    t = mc.table(ROWS, COLS, highlight="retrieval", baseline="baseline")
+    txt = t.text()
+    body = _body(txt)
+    assert body[0].startswith("▸ retrieval")
+    assert body[1].startswith("  warmup")
+    assert body[2].startswith("· baseline")
+    opens = {line.index("[") for line in body}
+    assert len(opens) == 1, "gutter keeps every column aligned"
+
+    asc = t.text(ascii=True)
+    assert asc.isascii() and _body(asc)[0].startswith("> retrieval")
+    assert _body(asc)[2].startswith(". baseline")
+
+    colored = t.text(color=True)
+    assert "\x1b[1m" in _body(colored)[0] and "\x1b[2m" in _body(colored)[2]
+    assert re.sub(r"\x1b\[\d+m", "", colored) == txt, "ANSI emphasis never shifts a column"
+
+    md = t.markdown().splitlines()
+    assert "| **retrieval** | **`82% ██████▌·`** |" in md[2]
+    assert "| warmup |" in md[3]
+    assert "| *baseline* |" in md[4]
+
+    html = t.html()
+    assert '<tr class="mc-highlight"><td class="mc-text">retrieval</td>' in html
+    assert '<tr><td class="mc-text">warmup</td>' in html
+    assert '<tr class="mc-baseline"><td class="mc-text">baseline</td>' in html
+
+    d = json.loads(json.dumps(t.to_dict()))
+    assert d["highlight"] == ["retrieval"] and d["baseline"] == "baseline"
+    rebuilt = mc.Table.from_dict(d)
+    assert rebuilt.text() == txt and rebuilt.html() == html and rebuilt.to_dict() == d
+
+    multi = mc.table(ROWS, COLS, highlight=["retrieval", "baseline"], baseline="baseline")
+    assert '<tr class="mc-highlight mc-baseline">' in multi.html()
+
+    plain = mc.table(ROWS, COLS)
+    assert "highlight" not in plain.to_dict() and "baseline" not in plain.to_dict()
+
+    with pytest.raises(mc.ChipError, match="highlight"):
+        mc.table(ROWS, COLS, highlight=123)  # type: ignore[arg-type]
+    with pytest.raises(mc.ChipError, match="baseline"):
+        mc.table(ROWS, COLS, baseline=123)  # type: ignore[arg-type]
+
+
+def test_tsv_and_jsonl_files(tmp_path) -> None:
+    rows = [{"model": "a", "acc": 0.8, "loss": [3, 2, 1]}, {"model": "b", "acc": 0.7}]
+    expect = mc.table(rows).text()
+
+    tsv = tmp_path / "r.tsv"
+    tsv.write_text("model\tacc\tloss\na\t0.8\t3 2 1\nb\t0.7\t\n", encoding="utf-8")
+    assert mc.table(tsv).text() == expect
+
+    jsonl = tmp_path / "r.jsonl"
+    jsonl.write_text("\n".join(json.dumps(r) for r in rows) + "\n\n", encoding="utf-8")
+    assert mc.table(jsonl).text() == expect
+
+    bad = tmp_path / "bad.jsonl"
+    bad.write_text('{"model": "a"}\n{not json}\n', encoding="utf-8")
+    with pytest.raises(mc.ChipError, match="line 2 is not valid JSON"):
+        mc.table(bad)
+
+    with pytest.raises(mc.ChipError, match=r"\.jsonl.*\.tsv"):
+        mc.table(tmp_path / "r.yaml")

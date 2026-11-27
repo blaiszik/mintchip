@@ -735,10 +735,12 @@ def render(
     compact: bool = False,
     title: str = "mintchip",
     theme: str = "auto",
+    fragment: bool = False,
 ) -> tuple[str, list[Directive]]:
     """Replace every directive in ``text`` with its chip. Formats: ``text``, ``ansi``, ``md``
-    (code spans), ``html`` (a full page via ``mintchip.document``). Returns the output and the
-    directives (each with its ``chip``), so callers can report warnings by location."""
+    (code spans), ``html`` (a full page via ``mintchip.document``, or embeddable ``<p>``
+    blocks when ``fragment=True``). Returns the output and the directives (each with its
+    ``chip``), so callers can report warnings by location."""
     if format not in ("text", "ansi", "md", "html"):
         raise ChipError(
             f"mintchip render: unknown format {format!r}.", fix_hint="Use text, ansi, md or html."
@@ -747,7 +749,7 @@ def render(
     for d, dom in zip(found, shared_domains([d.chip for d in found]), strict=True):  # type: ignore[misc]
         d.domain = dom
     if format == "html":
-        return _html_page(pieces, found, title=title, theme=theme), found
+        return _html_page(pieces, found, title=title, theme=theme, fragment=fragment), found
     out = [pieces[0]]
     for d, piece in zip(found, pieces[1:], strict=True):
         c = d.chip
@@ -759,7 +761,14 @@ def render(
     return "".join(out), found
 
 
-def _html_page(pieces: list[str], found: list[Directive], *, title: str, theme: str) -> str:
+def _html_page(
+    pieces: list[str],
+    found: list[Directive],
+    *,
+    title: str,
+    theme: str,
+    fragment: bool = False,
+) -> str:
     import mintchip
 
     parts = [html.escape(pieces[0])]
@@ -768,4 +777,6 @@ def _html_page(pieces: list[str], found: list[Directive], *, title: str, theme: 
         parts += [d.chip.html(theme=theme, domain=d.domain), html.escape(piece)]
     body = "".join(parts)
     blocks = [f"<p>{b.strip()}</p>" for b in re.split(r"\n[ \t]*\n", body) if b.strip()]
+    if fragment:
+        return "\n".join(blocks)
     return mintchip.document(title, blocks, theme=theme)

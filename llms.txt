@@ -1,16 +1,19 @@
 # mintchip
 
-> Turn numbers into word-sized graphics (sparklines, confidence intervals, before/after, pass/fail strips, small-multiple tables) in text, Markdown or HTML with one shell command. Use it any time you are about to report numbers: results, benchmarks, test runs, timings, comparisons.
+> Turn numbers with shape into word-sized graphics (sparklines, confidence intervals, before/after deltas, pass/fail strips, distributions, shares, shared-scale tables) in text, Markdown or HTML with one zero-dep shell command. Use when reporting results, benchmarks, test runs, timings, diffs, or comparisons. Do NOT use for routine code edits, bug fixes, refactoring, stack traces, or 1-3 bare scalars with no shape. Reach for mintfig when you need full multi-panel plots, 2D relationships, publication plates, or Matplotlib auditing.
 
 mintchip prints numbers as word-sized graphics for a sentence or a table cell, as text,
 Markdown or HTML. The number comes first, so the sentence reads even without the glyph.
 
 ## When to use a chip
-- When the numbers have a shape worth seeing: a trend, an interval, a before and after, a
-  pass/fail run, parts of a whole. Put the chip right after the words it supports.
-- A number with no shape is just a number: write 0.82, not a chip.
-- One chip per sentence is normal; two is the ceiling.
-- Three or more comparable values make a table (`mintchip table`), not a sentence.
+- Give numbers with shape a chip (trend, interval, before/after, pass/fail, share) right after
+  the words it supports.
+- A number with no shape is just a number: write 0.82. One chip per sentence is normal;
+  two is the ceiling. Three or more comparable values make a table (`mintchip table`).
+- Do NOT use for routine code edits, bug fixes, refactoring, stack traces, or 1–3 bare scalars
+  with no shape.
+- Use `mintchip` for inline chips & zero-dep terminal/Markdown/PR tables; reach for `mintfig`
+  for multi-panel plots, 2D relationships, publication plates, or Matplotlib auditing.
 
 ## Pick a chip by what you have
 | You have | Directive | Prints |
@@ -86,15 +89,10 @@ high]`; each chip column shares one scale. `--set KEY.OPTION=VALUE` applies to a
 e.g. `--set KEY.unit=s`. `--sort KEY` (largest first, text A to Z; `--asc` or `--desc` to
 choose), `--limit N`.
 
-## Output
-`--format text` (default), `md` (code spans, for GitHub and Slack), `ansi`, `html` (render: a
-full page), `svg` (one chip), `json`. `--ascii` for ASCII only; `--compact` for a short value.
+## Output & errors
+`--format text|md|ansi|html|svg|json`, `--ascii`, `--compact`. stdout holds only the result.
+Errors go to stderr (`mintchip: error: …` + `fix:`, exit 2). Warnings (`mintchip: warning: …`,
+exit 0; exit 1 with `--strict`) flag distortions like clipped outliers.
 
-## When something goes wrong
-stdout carries only the result. An error goes to stderr as `mintchip: error: …` plus a `fix:`
-line, usually the corrected command, and exits 2: apply the fix and rerun. A
-`mintchip: warning: …` (exit 0) means the chip marks a distortion, such as a clipped outlier:
-say so in your text or fix the data. `--strict` makes warnings exit 1.
-
-More: `mintchip schema` (JSON Schema for tool definitions), `mintchip catalog`. If `mintchip`
-is not on PATH, run `python -m mintchip`.
+More: `mintchip from`, `mintchip diff`, `mintchip doctor`, `mintchip skill`, `mintchip schema`,
+`mintchip catalog`, or `python -m mintchip`.

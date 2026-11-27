@@ -1,0 +1,234 @@
+{
+  "before_text": "I ran CI and benchmarked the new parser against main (18 runs each). The last 12 CI runs on main went pass, pass, pass, pass, fail, pass, pass, pass, pass, pass, fail, fail (9 of 12 passed, 3 failed). small.json went from 1.92 ms to 1.41 ms (−27%, 95% CI −30% to −24%), medium.json from 18.4 ms to 12.9 ms (−30%, −33% to −27%), large.json from 212 ms to 151 ms (−29%, −31% to −27%), nested.json from 44.0 ms to 46.1 ms (+5%, +2% to +8%, a regression), and unicode.json from 31.2 ms to 22.8 ms (−27%, −30% to −24%). On large.json median latency was 151 ms (IQR 149 to 153 ms) with one 240 ms outlier. Peak memory fell from 84 MB to 61 MB.",
+  "numbers_before": 37,
+  "render_ms": 1.5,
+  "css": ":root{--mc-accent:#3B7DDD;--mc-good:#2A9152;--mc-bad:#DC4535;--mc-warn:#B87A00}@media (prefers-color-scheme:dark){:root{--mc-accent:#5590E8;--mc-good:#31A05C;--mc-bad:#E85A48;--mc-warn:#C08000}}.mc{white-space:nowrap;font-variant-numeric:tabular-nums}.mc-open{text-decoration:none}.mc-open:hover,.mc-open:focus-visible,.mc:has(>.mc-pop:popover-open)>.mc-open{text-decoration:underline dotted 1px;text-decoration-color:color-mix(in srgb,currentColor 66%,transparent);text-underline-offset:.22em;outline:none}.mc-open:focus-visible:not(:has(.mc-v)){outline:1px dotted;outline-offset:2px}.mc-pop{margin:auto;padding:.35em .6em .4em;max-width:min(22em,calc(100vw - 2em));border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:3px;background:var(--mc-paper,Canvas);color:var(--mc-ink,CanvasText);font-size:.84em;line-height:1.45;font-weight:400;font-style:normal;text-align:left;white-space:normal;overflow-wrap:break-word}.mc-pop-l{font-weight:600}.mc-pop-w{color:color-mix(in srgb,currentColor 66%,transparent)}@supports (position-area:bottom) or (inset-area:bottom){.mc-pop{inset:auto;margin:.3em 0;inset-area:bottom span-right;position-area:bottom span-right;position-try-options:flip-block,flip-inline;position-try-fallbacks:flip-block,flip-inline}}.mc-table{border-collapse:collapse;font-variant-numeric:tabular-nums;line-height:1.4}.mc-table caption{caption-side:top;text-align:left;font-weight:600;padding:0 0 .4em}.mc-table th,.mc-table td{padding:.3em 0 .3em 1.25em;border:0;text-align:left;vertical-align:baseline}.mc-table :is(th,td):first-child{padding-left:0}.mc-table .mc-graph{padding-left:.45em}.mc-table thead th{font-weight:600;vertical-align:bottom}.mc-table thead tr:last-child>th{border-bottom:1px solid color-mix(in srgb,currentColor 40%,transparent)}.mc-table .mc-scale>th{font-weight:400;font-size:.75em;color:color-mix(in srgb,currentColor 66%,transparent);padding-top:0}.mc-table tbody th{font-weight:inherit}.mc-table tbody tr:first-child>*{padding-top:.5em}.mc-table tbody tr:last-child>*{padding-bottom:.5em;border-bottom:1px solid color-mix(in srgb,currentColor 40%,transparent)}.mc-table .mc-num{text-align:right}.mc-table .mc-empty{color:color-mix(in srgb,currentColor 66%,transparent)}.mc-table tr.mc-highlight>*{font-weight:600;background:color-mix(in srgb,var(--mc-accent) 9%,transparent)}.mc-table tr.mc-baseline>*{color:color-mix(in srgb,currentColor 66%,transparent)}.mc-table tr.mc-baseline:not(:first-child)>*{border-top:1px dashed color-mix(in srgb,currentColor 28%,transparent)}.mc-page{color-scheme:light dark;--mc-paper:#FFFFFF;--mc-ink:#1A1D21;background:var(--mc-paper);color:var(--mc-ink)}@media (prefers-color-scheme:dark){.mc-page{--mc-paper:#14181F;--mc-ink:#E6E9EE}}[data-mc-scheme=\"light\"],[data-mc-scheme=\"light\"] .mc,.mc[data-mc-scheme=\"light\"],.mc-page[data-mc-scheme=\"light\"]{color-scheme:light;--mc-paper:#FFFFFF;--mc-ink:#1A1D21;--mc-accent:#3B7DDD;--mc-good:#2A9152;--mc-bad:#DC4535;--mc-warn:#B87A00}[data-mc-scheme=\"dark\"],[data-mc-scheme=\"dark\"] .mc,.mc[data-mc-scheme=\"dark\"],.mc-page[data-mc-scheme=\"dark\"]{color-scheme:dark;--mc-paper:#14181F;--mc-ink:#E6E9EE;--mc-accent:#5590E8;--mc-good:#31A05C;--mc-bad:#E85A48;--mc-warn:#C08000}.mc-page body{margin:0}.mc-doc{display:grid;grid-template-columns:1fr min(34em,100%) 1fr;padding:clamp(2em,8vh,4.5em) 1.25em 4em;font:1.0625rem/1.55 system-ui,-apple-system,\"Segoe UI\",Roboto,sans-serif;-webkit-text-size-adjust:100%}.mc-doc>*{grid-column:2;margin:0 0 1em}.mc-doc p{text-wrap:pretty}.mc-doc>h1{font-size:1.55em;line-height:1.2;font-weight:650;letter-spacing:-.01em;margin-bottom:.3em;text-wrap:balance}.mc-doc>.mc-sub{color:color-mix(in srgb,currentColor 66%,transparent);margin-bottom:1.75em}.mc-doc>h2{font-size:1.1em;font-weight:600;margin:.8em 0 .4em}.mc-doc>.mc-wide{grid-column:1/-1;justify-self:center;width:max-content;min-width:min(34em,100%);max-width:100%;overflow-x:auto;margin:.25em 0 1.25em}.mc-doc .mc-table{font-size:.94em}.mc-doc>.mc-src{margin-top:1.5em;font-size:.85em;color:color-mix(in srgb,currentColor 66%,transparent)}",
+  "prose": {
+    "text": "CI on main is 9/12 pass ████×█████××. The new parser is ~28% faster on 4 of 5 inputs and 5% slower on nested.json. On large.json runs took med 151.0 ms [▂▂▄▄▄█▂▂▂▂]→240; peak memory fell 84→61 MB [··●────○··].",
+    "ansi": "CI on main is 9/12 pass \u001b[32m████\u001b[0m\u001b[31m×\u001b[0m\u001b[32m█████\u001b[0m\u001b[31m××\u001b[0m. The new parser is ~28% faster on 4 of 5 inputs and 5% slower on nested.json. On large.json runs took med 151.0 ms [▂▂▄▄▄█▂▂▂▂]→240; peak memory fell 84→61 MB [··\u001b[32m●────\u001b[0m○··].",
+    "ansi_spans": [
+      {
+        "t": "CI on main is 9/12 pass ",
+        "c": null,
+        "dim": false,
+        "b": false
+      },
+      {
+        "t": "████",
+        "c": "green",
+        "dim": false,
+        "b": false
+      },
+      {
+        "t": "×",
+        "c": "red",
+        "dim": false,
+        "b": false
+      },
+      {
+        "t": "█████",
+        "c": "green",
+        "dim": false,
+        "b": false
+      },
+      {
+        "t": "××",
+        "c": "red",
+        "dim": false,
+        "b": false
+      },
+      {
+        "t": ". The new parser is ~28% faster on 4 of 5 inputs and 5% slower on nested.json. On large.json runs took med 151.0 ms [▂▂▄▄▄█▂▂▂▂]→240; peak memory fell 84→61 MB [··",
+        "c": null,
+        "dim": false,
+        "b": false
+      },
+      {
+        "t": "●────",
+        "c": "green",
+        "dim": false,
+        "b": false
+      },
+      {
+        "t": "○··].",
+        "c": null,
+        "dim": false,
+        "b": false
+      }
+    ],
+    "md": "CI on main is `9/12 pass ████×█████××`. The new parser is ~28% faster on 4 of 5 inputs and 5% slower on nested.json. On large.json runs took `med 151.0 ms [▂▂▄▄▄█▂▂▂▂]→240`; peak memory fell `84→61 MB [··●────○··]`.",
+    "html": "CI on main is <span class=\"mc mc-strip\"><button type=\"button\" class=\"mc-open\" popovertarget=\"mc-5150a153-1\" style=\"font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;white-space:nowrap;anchor-name:--mc-5150a153-1\" aria-label=\"9/12 pass across 12 items.\"><span class=\"mc-v\">9/12 pass</span> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 70.33 16\" width=\"4.4em\" height=\"1em\" role=\"img\" aria-label=\"9/12 pass across 12 items.\" data-mc=\"{&quot;chip&quot;:&quot;strip&quot;,&quot;values&quot;:[&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;fail&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;fail&quot;,&quot;fail&quot;]}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>9/12 pass across 12 items.</title><desc>3 fail; fail: item 5, item 11, item 12</desc><rect x=\"2.5\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 1: pass</title></rect><rect x=\"8.08\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 2: pass</title></rect><rect x=\"13.67\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 3: pass</title></rect><rect x=\"19.25\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 4: pass</title></rect><rect x=\"24.83\" y=\"11.5\" width=\"3.91\" height=\"2\" style=\"fill:var(--mc-bad, #DC4535)\"><title>item 5: fail</title></rect><rect x=\"30.42\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 6: pass</title></rect><rect x=\"36\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 7: pass</title></rect><rect x=\"41.58\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 8: pass</title></rect><rect x=\"47.17\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 9: pass</title></rect><rect x=\"52.75\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 10: pass</title></rect><rect x=\"58.33\" y=\"11.5\" width=\"3.91\" height=\"2\" style=\"fill:var(--mc-bad, #DC4535)\"><title>item 11: fail</title></rect><rect x=\"63.92\" y=\"11.5\" width=\"3.91\" height=\"2\" style=\"fill:var(--mc-bad, #DC4535)\"><title>item 12: fail</title></rect></svg></button><span id=\"mc-5150a153-1\" class=\"mc-pop\" popover style=\"position-anchor:--mc-5150a153-1\">9/12 pass (3 fail)<br>fail: item 5, item 11, item 12</span></span>. The new parser is ~28% faster on 4 of 5 inputs and 5% slower on nested.json. On large.json runs took <span class=\"mc mc-dist\"><button type=\"button\" class=\"mc-open\" popovertarget=\"mc-8b05e6b1-2\" style=\"font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;white-space:nowrap;anchor-name:--mc-8b05e6b1-2\" aria-label=\"distribution of 18 samples, median 151.0 ms.\"><span class=\"mc-v\">med 151.0 ms</span> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"distribution of 18 samples, median 151.0 ms.\" data-mc=\"{&quot;chip&quot;:&quot;dist&quot;,&quot;samples&quot;:[146.0,147.0,148.0,148.0,149.0,149.0,150.0,150.0,151.0,151.0,151.0,152.0,152.0,153.0,154.0,155.0,156.0,240.0],&quot;unit&quot;:&quot;ms&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>distribution of 18 samples, median 151.0 ms.</title><desc>n=18, median 151.0 ms, IQR 149.0 to 152.8 ms; range 146.0 to 240.0 ms; 1 outlier(s) beyond 3×IQR: 240</desc><path d=\"M5.77 2L5.77 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>146.0 ms</title></path><path d=\"M11.21 2L11.21 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>147.0 ms</title></path><path d=\"M16.66 2.75L16.66 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>148.0 ms ×2</title></path><path d=\"M22.11 2.75L22.11 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>149.0 ms ×2</title></path><path d=\"M27.55 2.75L27.55 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>150.0 ms ×2</title></path><path d=\"M33 3.5L33 9\" style=\"fill:none;stroke:currentColor;stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round\"><title>151.0 ms ×3</title></path><path d=\"M38.45 2.75L38.45 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>152.0 ms ×2</title></path><path d=\"M43.89 2L43.89 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>153.0 ms</title></path><path d=\"M49.34 2L49.34 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>154.0 ms</title></path><path d=\"M54.79 2L54.79 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>155.0 ms</title></path><path d=\"M60.23 2L60.23 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>156.0 ms</title></path><circle cx=\"33\" cy=\"13.75\" r=\"1.75\" style=\"fill:var(--mc-accent, #3B7DDD)\"><title>median 151.0 ms</title></circle><path d=\"M66.5 5L69 8L66.5 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round\"><title>1 above the scale, to 240 ms</title></path></svg></button><span id=\"mc-8b05e6b1-2\" class=\"mc-pop\" popover style=\"position-anchor:--mc-8b05e6b1-2\">med 151.0 ms (n=18, IQR 149.0 to 152.8)<br>range 146.0 to 240.0 ms<br>1 outlier(s) beyond 3×IQR: 240<br><span class=\"mc-pop-w\">Note: 1 sample(s) (240) beyond 3×IQR clipped so they do not flatten the scale; their values are printed past the brackets in text and a chevron marks the edge in SVG.</span></span></span>; peak memory fell <span class=\"mc mc-delta\"><button type=\"button\" class=\"mc-open\" popovertarget=\"mc-dca4cc31-3\" style=\"font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;white-space:nowrap;anchor-name:--mc-dca4cc31-3\" aria-label=\"84 to 61 MB, down 23 MB (−27% of the start).\"><span class=\"mc-v\">84→61 MB</span> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"84 to 61 MB, down 23 MB (−27% of the start).\" data-mc=\"{&quot;chip&quot;:&quot;delta&quot;,&quot;before&quot;:84.0,&quot;after&quot;:61.0,&quot;higher_is_better&quot;:false,&quot;unit&quot;:&quot;MB&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>84 to 61 MB, down 23 MB (−27% of the start).</title><desc>down 23 MB (−27% of the start); lower is better</desc><path d=\"M3.25 8L49.12 8M55.62 8L68.75 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.6\"/><path d=\"M49.12 8L19.62 8\" style=\"fill:none;stroke:var(--mc-good, #2A9152);stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"52.38\" cy=\"8\" r=\"2.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>84 MB</title></circle><circle cx=\"19.62\" cy=\"8\" r=\"2.75\" style=\"fill:var(--mc-good, #2A9152)\"><title>61 MB (−23 MB)</title></circle></svg></button><span id=\"mc-dca4cc31-3\" class=\"mc-pop\" popover style=\"position-anchor:--mc-dca4cc31-3\">84→61 MB (−23 MB)<br>down 23 MB (−27% of the start)<br>lower is better</span></span>."
+  },
+  "table": {
+    "text": "input            main      new  change, 95% CI\n                                     −38      +9.3\n──────────────────────────────────────────────────\nsmall.json    1.92 ms  1.41 ms  −27% [··●┤····│··]\nmedium.json   18.4 ms  12.9 ms  −30% [·├●·····│··]\nlarge.json     212 ms   151 ms  −29% [··●·····│··]\nnested.json     44 ms  46.1 ms   +5% [········├●┤]\nunicode.json  31.2 ms  22.8 ms  −27% [··●┤····│··]",
+    "ansi": "input            main      new  change, 95% CI\n                                     −38      +9.3\n──────────────────────────────────────────────────\nsmall.json    1.92 ms  1.41 ms  −27% [··●┤····\u001b[2m│\u001b[0m··]\nmedium.json   18.4 ms  12.9 ms  −30% [·├●·····\u001b[2m│\u001b[0m··]\nlarge.json     212 ms   151 ms  −29% [··●·····\u001b[2m│\u001b[0m··]\nnested.json     44 ms  46.1 ms   +5% [········├●┤]\nunicode.json  31.2 ms  22.8 ms  −27% [··●┤····\u001b[2m│\u001b[0m··]",
+    "ansi_lines": [
+      [
+        {
+          "t": "input            main      new  change, 95% CI",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ],
+      [
+        {
+          "t": "                                     −38      +9.3",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ],
+      [
+        {
+          "t": "──────────────────────────────────────────────────",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ],
+      [
+        {
+          "t": "small.json    1.92 ms  1.41 ms  −27% [··●┤····",
+          "c": null,
+          "dim": false,
+          "b": false
+        },
+        {
+          "t": "│",
+          "c": null,
+          "dim": true,
+          "b": false
+        },
+        {
+          "t": "··]",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ],
+      [
+        {
+          "t": "medium.json   18.4 ms  12.9 ms  −30% [·├●·····",
+          "c": null,
+          "dim": false,
+          "b": false
+        },
+        {
+          "t": "│",
+          "c": null,
+          "dim": true,
+          "b": false
+        },
+        {
+          "t": "··]",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ],
+      [
+        {
+          "t": "large.json     212 ms   151 ms  −29% [··●·····",
+          "c": null,
+          "dim": false,
+          "b": false
+        },
+        {
+          "t": "│",
+          "c": null,
+          "dim": true,
+          "b": false
+        },
+        {
+          "t": "··]",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ],
+      [
+        {
+          "t": "nested.json     44 ms  46.1 ms   +5% [········├●┤]",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ],
+      [
+        {
+          "t": "unicode.json  31.2 ms  22.8 ms  −27% [··●┤····",
+          "c": null,
+          "dim": false,
+          "b": false
+        },
+        {
+          "t": "│",
+          "c": null,
+          "dim": true,
+          "b": false
+        },
+        {
+          "t": "··]",
+          "c": null,
+          "dim": false,
+          "b": false
+        }
+      ]
+    ],
+    "plain_lines": [
+      "input            main      new  change, 95% CI",
+      "                                     −38      +9.3",
+      "──────────────────────────────────────────────────",
+      "small.json    1.92 ms  1.41 ms  −27% [··●┤····│··]",
+      "medium.json   18.4 ms  12.9 ms  −30% [·├●·····│··]",
+      "large.json     212 ms   151 ms  −29% [··●·····│··]",
+      "nested.json     44 ms  46.1 ms   +5% [········├●┤]",
+      "unicode.json  31.2 ms  22.8 ms  −27% [··●┤····│··]"
+    ],
+    "zero_col": 46,
+    "md": "| input | main | new | change, 95% CI (−38 to +9.3) |\n|:--|--:|--:|:--|\n| small.json | `1.92 ms` | `1.41 ms` | `−27% [··●┤····│··]` |\n| medium.json | `18.4 ms` | `12.9 ms` | `−30% [·├●·····│··]` |\n| large.json | ` 212 ms` | ` 151 ms` | `−29% [··●·····│··]` |\n| nested.json | `  44 ms` | `46.1 ms` | ` +5% [········├●┤]` |\n| unicode.json | `31.2 ms` | `22.8 ms` | `−27% [··●┤····│··]` |",
+    "md_lines": [
+      "| input | main | new | change, 95% CI (−38 to +9.3) |",
+      "|:--|--:|--:|:--|",
+      "| small.json | `1.92 ms` | `1.41 ms` | `−27% [··●┤····│··]` |",
+      "| medium.json | `18.4 ms` | `12.9 ms` | `−30% [·├●·····│··]` |",
+      "| large.json | ` 212 ms` | ` 151 ms` | `−29% [··●·····│··]` |",
+      "| nested.json | `  44 ms` | `46.1 ms` | ` +5% [········├●┤]` |",
+      "| unicode.json | `31.2 ms` | `22.8 ms` | `−27% [··●┤····│··]` |"
+    ],
+    "html": "<table class=\"mc-table\" cellspacing=\"0\" cellpadding=\"3\">\n<thead><tr><th scope=\"col\" class=\"mc-text\" align=\"left\">input</th><th scope=\"col\" class=\"mc-chip mc-num\" align=\"right\">main</th><th scope=\"col\" class=\"mc-chip mc-num\" align=\"right\">new</th><th scope=\"col\" class=\"mc-chip\" colspan=\"2\" align=\"left\">change, 95% CI</th></tr>\n<tr class=\"mc-scale\"><th></th><th></th><th></th><th></th><th class=\"mc-graph\" style=\"font-weight:normal;font-size:.75em\"><span style=\"display:flex;justify-content:space-between;gap:.5em\"><span class=\"mc-lo\">−38</span><span class=\"mc-hi\">+9.3</span></span></th></tr>\n</thead><tbody>\n<tr><td class=\"mc-text\">small.json</td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">1.92 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">1.41 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">−27%</span></td><td class=\"mc-graph\"><span class=\"mc mc-ci\" style=\"white-space:nowrap\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"Estimate −27%, 95% interval −30 to −24%, excludes 0.\" data-mc=\"{&quot;chip&quot;:&quot;ci&quot;,&quot;estimate&quot;:-27.0,&quot;interval&quot;:[-30.0,-24.0],&quot;level&quot;:0.95,&quot;unit&quot;:&quot;%&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>Estimate −27%, 95% interval −30 to −24%, excludes 0.</title><desc>95% interval width 6%; excludes the reference 0%</desc><path d=\"M56.43 1.5L56.43 14.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.45\"/><path d=\"M14.16 8L22.62 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M14.16 5L14.16 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M22.62 5L22.62 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"18.39\" cy=\"8\" r=\"2.75\" style=\"fill:currentColor\"><title>−27%</title></circle></svg></span></td></tr>\n<tr><td class=\"mc-text\">medium.json</td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">18.4 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">12.9 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">−30%</span></td><td class=\"mc-graph\"><span class=\"mc mc-ci\" style=\"white-space:nowrap\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"Estimate −30%, 95% interval −33 to −27%, excludes 0.\" data-mc=\"{&quot;chip&quot;:&quot;ci&quot;,&quot;estimate&quot;:-30.0,&quot;interval&quot;:[-33.0,-27.0],&quot;level&quot;:0.95,&quot;unit&quot;:&quot;%&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>Estimate −30%, 95% interval −33 to −27%, excludes 0.</title><desc>95% interval width 6%; excludes the reference 0%</desc><path d=\"M56.43 1.5L56.43 14.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.45\"/><path d=\"M9.94 8L18.39 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M9.94 5L9.94 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M18.39 5L18.39 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"14.16\" cy=\"8\" r=\"2.75\" style=\"fill:currentColor\"><title>−30%</title></circle></svg></span></td></tr>\n<tr><td class=\"mc-text\">large.json</td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">212 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">151 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">−29%</span></td><td class=\"mc-graph\"><span class=\"mc mc-ci\" style=\"white-space:nowrap\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"Estimate −29%, 95% interval −31 to −27%, excludes 0.\" data-mc=\"{&quot;chip&quot;:&quot;ci&quot;,&quot;estimate&quot;:-29.0,&quot;interval&quot;:[-31.0,-27.0],&quot;level&quot;:0.95,&quot;unit&quot;:&quot;%&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>Estimate −29%, 95% interval −31 to −27%, excludes 0.</title><desc>95% interval width 4%; excludes the reference 0%</desc><path d=\"M56.43 1.5L56.43 14.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.45\"/><path d=\"M12.76 8L18.39 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M12.76 5L12.76 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M18.39 5L18.39 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"15.57\" cy=\"8\" r=\"2.75\" style=\"fill:currentColor\"><title>−29%</title></circle></svg></span></td></tr>\n<tr><td class=\"mc-text\">nested.json</td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">44 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">46.1 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">+5%</span></td><td class=\"mc-graph\"><span class=\"mc mc-ci\" style=\"white-space:nowrap\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"Estimate +5%, 95% interval +2 to +8%, excludes 0.\" data-mc=\"{&quot;chip&quot;:&quot;ci&quot;,&quot;estimate&quot;:5.0,&quot;interval&quot;:[2.0,8.0],&quot;level&quot;:0.95,&quot;unit&quot;:&quot;%&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>Estimate +5%, 95% interval +2 to +8%, excludes 0.</title><desc>95% interval width 6%; excludes the reference 0%</desc><path d=\"M56.43 1.5L56.43 14.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.45\"/><path d=\"M59.24 8L67.7 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M59.24 5L59.24 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M67.7 5L67.7 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"63.47\" cy=\"8\" r=\"2.75\" style=\"fill:currentColor\"><title>+5%</title></circle></svg></span></td></tr>\n<tr><td class=\"mc-text\">unicode.json</td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">31.2 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">22.8 ms</span></td><td class=\"mc-num\" align=\"right\"><span class=\"mc-v\">−27%</span></td><td class=\"mc-graph\"><span class=\"mc mc-ci\" style=\"white-space:nowrap\"><svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"Estimate −27%, 95% interval −30 to −24%, excludes 0.\" data-mc=\"{&quot;chip&quot;:&quot;ci&quot;,&quot;estimate&quot;:-27.0,&quot;interval&quot;:[-30.0,-24.0],&quot;level&quot;:0.95,&quot;unit&quot;:&quot;%&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>Estimate −27%, 95% interval −30 to −24%, excludes 0.</title><desc>95% interval width 6%; excludes the reference 0%</desc><path d=\"M56.43 1.5L56.43 14.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.45\"/><path d=\"M14.16 8L22.62 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M14.16 5L14.16 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M22.62 5L22.62 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"18.39\" cy=\"8\" r=\"2.75\" style=\"fill:currentColor\"><title>−27%</title></circle></svg></span></td></tr>\n</tbody></table>"
+  },
+  "distortion": {
+    "dist_compact_text": "med 151.0 ms [▂▂▄▄▄█▂▂▂▂]→240",
+    "dist_full_text": "med 151.0 ms (n=18, IQR 149.0 to 152.8) [▂▂▄▄▄█▂▂▂▂]→240",
+    "dist_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"distribution of 18 samples, median 151.0 ms.\" data-mc=\"{&quot;chip&quot;:&quot;dist&quot;,&quot;samples&quot;:[146.0,147.0,148.0,148.0,149.0,149.0,150.0,150.0,151.0,151.0,151.0,152.0,152.0,153.0,154.0,155.0,156.0,240.0],&quot;unit&quot;:&quot;ms&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>distribution of 18 samples, median 151.0 ms.</title><desc>n=18, median 151.0 ms, IQR 149.0 to 152.8 ms; range 146.0 to 240.0 ms; 1 outlier(s) beyond 3×IQR: 240</desc><path d=\"M5.77 2L5.77 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>146.0 ms</title></path><path d=\"M11.21 2L11.21 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>147.0 ms</title></path><path d=\"M16.66 2.75L16.66 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>148.0 ms ×2</title></path><path d=\"M22.11 2.75L22.11 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>149.0 ms ×2</title></path><path d=\"M27.55 2.75L27.55 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>150.0 ms ×2</title></path><path d=\"M33 3.5L33 9\" style=\"fill:none;stroke:currentColor;stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round\"><title>151.0 ms ×3</title></path><path d=\"M38.45 2.75L38.45 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>152.0 ms ×2</title></path><path d=\"M43.89 2L43.89 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>153.0 ms</title></path><path d=\"M49.34 2L49.34 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>154.0 ms</title></path><path d=\"M54.79 2L54.79 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>155.0 ms</title></path><path d=\"M60.23 2L60.23 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>156.0 ms</title></path><circle cx=\"33\" cy=\"13.75\" r=\"1.75\" style=\"fill:var(--mc-accent, #3B7DDD)\"><title>median 151.0 ms</title></circle><path d=\"M66.5 5L69 8L66.5 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round\"><title>1 above the scale, to 240 ms</title></path></svg>",
+    "dist_html": "<span class=\"mc mc-dist\"><button type=\"button\" class=\"mc-open\" popovertarget=\"mc-8b05e6b1-4\" style=\"font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer;white-space:nowrap;anchor-name:--mc-8b05e6b1-4\" aria-label=\"distribution of 18 samples, median 151.0 ms.\"><span class=\"mc-v\">med 151.0 ms</span> <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"distribution of 18 samples, median 151.0 ms.\" data-mc=\"{&quot;chip&quot;:&quot;dist&quot;,&quot;samples&quot;:[146.0,147.0,148.0,148.0,149.0,149.0,150.0,150.0,151.0,151.0,151.0,152.0,152.0,153.0,154.0,155.0,156.0,240.0],&quot;unit&quot;:&quot;ms&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>distribution of 18 samples, median 151.0 ms.</title><desc>n=18, median 151.0 ms, IQR 149.0 to 152.8 ms; range 146.0 to 240.0 ms; 1 outlier(s) beyond 3×IQR: 240</desc><path d=\"M5.77 2L5.77 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>146.0 ms</title></path><path d=\"M11.21 2L11.21 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>147.0 ms</title></path><path d=\"M16.66 2.75L16.66 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>148.0 ms ×2</title></path><path d=\"M22.11 2.75L22.11 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>149.0 ms ×2</title></path><path d=\"M27.55 2.75L27.55 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>150.0 ms ×2</title></path><path d=\"M33 3.5L33 9\" style=\"fill:none;stroke:currentColor;stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round\"><title>151.0 ms ×3</title></path><path d=\"M38.45 2.75L38.45 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>152.0 ms ×2</title></path><path d=\"M43.89 2L43.89 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>153.0 ms</title></path><path d=\"M49.34 2L49.34 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>154.0 ms</title></path><path d=\"M54.79 2L54.79 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>155.0 ms</title></path><path d=\"M60.23 2L60.23 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>156.0 ms</title></path><circle cx=\"33\" cy=\"13.75\" r=\"1.75\" style=\"fill:var(--mc-accent, #3B7DDD)\"><title>median 151.0 ms</title></circle><path d=\"M66.5 5L69 8L66.5 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round\"><title>1 above the scale, to 240 ms</title></path></svg></button><span id=\"mc-8b05e6b1-4\" class=\"mc-pop\" popover style=\"position-anchor:--mc-8b05e6b1-4\">med 151.0 ms (n=18, IQR 149.0 to 152.8)<br>range 146.0 to 240.0 ms<br>1 outlier(s) beyond 3×IQR: 240<br><span class=\"mc-pop-w\">Note: 1 sample(s) (240) beyond 3×IQR clipped so they do not flatten the scale; their values are printed past the brackets in text and a chevron marks the edge in SVG.</span></span></span>",
+    "stderr_warning": "mintchip: warning: line 1, column 187: {{dist 146 147 148 148 149 149 150 150 151 15...}}: 1 sample(s) (240) beyond 3×IQR clipped so they do not flatten the scale; their values are printed past the brackets in text and a chevron marks the edge in SVG.",
+    "warnings": [
+      "1 sample(s) (240) beyond 3×IQR clipped so they do not flatten the scale; their values are printed past the brackets in text and a chevron marks the edge in SVG."
+    ]
+  },
+  "end_chips": [
+    {
+      "kind": "strip",
+      "label": "9/12 pass",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 70.33 16\" width=\"4.4em\" height=\"1em\" role=\"img\" aria-label=\"9/12 pass across 12 items.\" data-mc=\"{&quot;chip&quot;:&quot;strip&quot;,&quot;values&quot;:[&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;fail&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;pass&quot;,&quot;fail&quot;,&quot;fail&quot;]}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>9/12 pass across 12 items.</title><desc>3 fail; fail: item 5, item 11, item 12</desc><rect x=\"2.5\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 1: pass</title></rect><rect x=\"8.08\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 2: pass</title></rect><rect x=\"13.67\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 3: pass</title></rect><rect x=\"19.25\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 4: pass</title></rect><rect x=\"24.83\" y=\"11.5\" width=\"3.91\" height=\"2\" style=\"fill:var(--mc-bad, #DC4535)\"><title>item 5: fail</title></rect><rect x=\"30.42\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 6: pass</title></rect><rect x=\"36\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 7: pass</title></rect><rect x=\"41.58\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 8: pass</title></rect><rect x=\"47.17\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 9: pass</title></rect><rect x=\"52.75\" y=\"2.5\" width=\"3.91\" height=\"11\" style=\"fill:var(--mc-good, #2A9152)\"><title>item 10: pass</title></rect><rect x=\"58.33\" y=\"11.5\" width=\"3.91\" height=\"2\" style=\"fill:var(--mc-bad, #DC4535)\"><title>item 11: fail</title></rect><rect x=\"63.92\" y=\"11.5\" width=\"3.91\" height=\"2\" style=\"fill:var(--mc-bad, #DC4535)\"><title>item 12: fail</title></rect></svg>"
+    },
+    {
+      "kind": "dist",
+      "label": "med 151.0 ms",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"distribution of 18 samples, median 151.0 ms.\" data-mc=\"{&quot;chip&quot;:&quot;dist&quot;,&quot;samples&quot;:[146.0,147.0,148.0,148.0,149.0,149.0,150.0,150.0,151.0,151.0,151.0,152.0,152.0,153.0,154.0,155.0,156.0,240.0],&quot;unit&quot;:&quot;ms&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>distribution of 18 samples, median 151.0 ms.</title><desc>n=18, median 151.0 ms, IQR 149.0 to 152.8 ms; range 146.0 to 240.0 ms; 1 outlier(s) beyond 3×IQR: 240</desc><path d=\"M5.77 2L5.77 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>146.0 ms</title></path><path d=\"M11.21 2L11.21 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>147.0 ms</title></path><path d=\"M16.66 2.75L16.66 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>148.0 ms ×2</title></path><path d=\"M22.11 2.75L22.11 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>149.0 ms ×2</title></path><path d=\"M27.55 2.75L27.55 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>150.0 ms ×2</title></path><path d=\"M33 3.5L33 9\" style=\"fill:none;stroke:currentColor;stroke-width:4.5;stroke-linecap:round;stroke-linejoin:round\"><title>151.0 ms ×3</title></path><path d=\"M38.45 2.75L38.45 9.75\" style=\"fill:none;stroke:currentColor;stroke-width:3;stroke-linecap:round;stroke-linejoin:round\"><title>152.0 ms ×2</title></path><path d=\"M43.89 2L43.89 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>153.0 ms</title></path><path d=\"M49.34 2L49.34 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>154.0 ms</title></path><path d=\"M54.79 2L54.79 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>155.0 ms</title></path><path d=\"M60.23 2L60.23 10.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>156.0 ms</title></path><circle cx=\"33\" cy=\"13.75\" r=\"1.75\" style=\"fill:var(--mc-accent, #3B7DDD)\"><title>median 151.0 ms</title></circle><path d=\"M66.5 5L69 8L66.5 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round\"><title>1 above the scale, to 240 ms</title></path></svg>"
+    },
+    {
+      "kind": "delta",
+      "label": "84→61 MB",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"84 to 61 MB, down 23 MB (−27% of the start).\" data-mc=\"{&quot;chip&quot;:&quot;delta&quot;,&quot;before&quot;:84.0,&quot;after&quot;:61.0,&quot;higher_is_better&quot;:false,&quot;unit&quot;:&quot;MB&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>84 to 61 MB, down 23 MB (−27% of the start).</title><desc>down 23 MB (−27% of the start); lower is better</desc><path d=\"M3.25 8L49.12 8M55.62 8L68.75 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.6\"/><path d=\"M49.12 8L19.62 8\" style=\"fill:none;stroke:var(--mc-good, #2A9152);stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"52.38\" cy=\"8\" r=\"2.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"><title>84 MB</title></circle><circle cx=\"19.62\" cy=\"8\" r=\"2.75\" style=\"fill:var(--mc-good, #2A9152)\"><title>61 MB (−23 MB)</title></circle></svg>"
+    },
+    {
+      "kind": "ci",
+      "label": "−29% (95% CI)",
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 72 16\" width=\"4.5em\" height=\"1em\" role=\"img\" aria-label=\"Estimate −29%, 95% interval −31 to −27%, excludes 0.\" data-mc=\"{&quot;chip&quot;:&quot;ci&quot;,&quot;estimate&quot;:-29.0,&quot;interval&quot;:[-31.0,-27.0],&quot;level&quot;:0.95,&quot;unit&quot;:&quot;%&quot;}\" style=\"vertical-align:-0.15em;overflow:visible\"><title>Estimate −29%, 95% interval −31 to −27%, excludes 0.</title><desc>95% interval width 4%; excludes the reference 0%</desc><path d=\"M68.21 1.5L68.21 14.5\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round;stroke-opacity:0.45\"/><path d=\"M3.79 8L12.1 8\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M3.79 5L3.79 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><path d=\"M12.1 5L12.1 11\" style=\"fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round\"/><circle cx=\"7.94\" cy=\"8\" r=\"2.75\" style=\"fill:currentColor\"><title>−29%</title></circle></svg>"
+    }
+  ]
+}

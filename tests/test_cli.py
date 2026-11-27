@@ -78,6 +78,8 @@ def test_render_reads_stdin_and_files(tmp_path, monkeypatch, capsys) -> None:
     assert run(["render", str(f), "--format", "md"]) == (0, "`3 ms`", "")
     page = run(["render", str(f), "--format", "html"])[1]
     assert page.startswith("<!doctype html>") and "<title>msg</title>" in page
+    frag = run(["render", str(f), "--format", "html", "--fragment"])[1]
+    assert frag.startswith("<p>") and "<!doctype" not in frag.lower() and "mc-num" in frag
     code, out, err = run(["render", "-"], "x\n{{spark 1 2 bnd=0}}\n")
     assert (code, out) == (2, "")
     assert "line 2, column 1: {{spark 1 2 bnd=0}}: spark: unknown option bnd=." in err
@@ -117,6 +119,29 @@ def test_table_from_file_and_stdin(tmp_path) -> None:
     assert code == 0 and out.index("b ") < out.index("a ")
     assert run(["table", "-", "--col", "model", "--asc", "--desc"], csv_rows)[0] == 2
     assert run(["table", str(f), *cols, "--format", "md"])[1].startswith("| model")
+
+    # .tsv and .jsonl files + stdin, plus --highlight, --baseline, --width
+    jsonl_text = "\n".join(json.dumps(r) for r in ROWS) + "\n"
+    jf = tmp_path / "r.jsonl"
+    jf.write_text(jsonl_text, encoding="utf-8")
+    assert run(["table", str(jf), *argv]) == (0, expect + "\n", "")
+    assert run(["table", "-", *argv], jsonl_text) == (0, expect + "\n", "")
+
+    tsv_text = "model\tacc\na\t0.82\nb\t0.75\n"
+    tf = tmp_path / "r.tsv"
+    tf.write_text(tsv_text, encoding="utf-8")
+    code, out_file, _ = run(["table", str(tf), "--col", "model", "--col", "acc:bar"])
+    code2, out_stdin, _ = run(["table", "-", "--col", "model", "--col", "acc:bar"], tsv_text)
+    assert code == 0 and code2 == 0 and out_file == out_stdin and "82%" in out_file
+
+    code, out_hi, _ = run(
+        ["table", str(f), *cols, "--highlight", "a", "--baseline", "b", "--width", "120"]
+    )
+    assert code == 0 and "▸ a" in out_hi and "· b" in out_hi
+    code, out_html, _ = run(
+        ["table", str(f), *cols, "--highlight", "a", "--baseline", "b", "--format", "html"]
+    )
+    assert code == 0 and 'class="mc-highlight"' in out_html and 'class="mc-baseline"' in out_html
 
 
 @pytest.mark.parametrize(

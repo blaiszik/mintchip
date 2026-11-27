@@ -148,11 +148,14 @@ vertical-align:baseline}}
 .mc-table tbody tr:last-child>*{{padding-bottom:.5em;border-bottom:{_RULE}}}
 .mc-table .mc-num{{text-align:right}}
 .mc-table .mc-empty{{color:{_MUTED}}}
+.mc-table tr.mc-highlight>*{{font-weight:600;background:color-mix(in srgb,var(--mc-accent) 9%,transparent)}}
+.mc-table tr.mc-baseline>*{{color:{_MUTED}}}
+.mc-table tr.mc-baseline:not(:first-child)>*{{border-top:1px dashed color-mix(in srgb,currentColor 28%,transparent)}}
 .mc-page{{color-scheme:light dark;{_PAPER["light"]};background:var(--mc-paper);
 color:var(--mc-ink)}}
 @media (prefers-color-scheme:dark){{.mc-page{{{_PAPER["dark"]}}}}}
-.mc-page[data-mc-scheme=light]{{color-scheme:light;{_PAPER["light"]};{_LIGHT}}}
-.mc-page[data-mc-scheme=dark]{{color-scheme:dark;{_PAPER["dark"]};{_DARK}}}
+[data-mc-scheme="light"],[data-mc-scheme="light"] .mc,.mc[data-mc-scheme="light"],.mc-page[data-mc-scheme="light"]{{color-scheme:light;{_PAPER["light"]};{_LIGHT}}}
+[data-mc-scheme="dark"],[data-mc-scheme="dark"] .mc,.mc[data-mc-scheme="dark"],.mc-page[data-mc-scheme="dark"]{{color-scheme:dark;{_PAPER["dark"]};{_DARK}}}
 .mc-page body{{margin:0}}
 .mc-doc{{display:grid;grid-template-columns:1fr min(34em,100%) 1fr;
 padding:clamp(2em,8vh,4.5em) 1.25em 4em;font:1.0625rem/1.55 system-ui,-apple-system,
@@ -169,13 +172,49 @@ min-width:min(34em,100%);max-width:100%;overflow-x:auto;margin:.25em 0 1.25em}}
 .mc-doc>.mc-src{{margin-top:1.5em;font-size:.85em;color:{_MUTED}}}
 """
 _CSS = "".join(line.strip() for line in _CSS.strip().splitlines())
+_COMPACT_CSS = (
+    ".mc-compact,.mc-compact body{background:transparent}"
+    ".mc-compact .mc-doc{display:block;padding:4px 0}"
+    ".mc-compact .mc-doc>.mc-wide{width:auto;min-width:0}"
+)
+_THEME_SYNC_JS = (
+    "(function(){var H=document.documentElement;"
+    "function sync(){"
+    "var c=H.classList,t=H.getAttribute('data-theme');"
+    "if(c.contains('light')||t==='light'){H.setAttribute('data-mc-scheme','light');}"
+    "else if(c.contains('dark')||t==='dark'){H.setAttribute('data-mc-scheme','dark');}"
+    "else if(window.matchMedia){"
+    "H.setAttribute('data-mc-scheme',"
+    "window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');}"
+    "}"
+    "sync();"
+    "window.addEventListener('themechange',sync);"
+    "if(window.matchMedia){"
+    "var mq=window.matchMedia('(prefers-color-scheme:dark)');"
+    "if(mq.addEventListener)mq.addEventListener('change',sync);}"
+    "})();"
+)
 
 
-def css() -> str:
+def css(accent: str | None = None) -> str:
     """The one stylesheet for chips, popovers, ``mintchip.table`` and ``document()``. It
     sets ``--mc-accent``, ``--mc-good``, ``--mc-bad`` and ``--mc-warn`` (with dark values under
-    ``prefers-color-scheme: dark``); override them on any ancestor to restyle."""
-    return _CSS
+    ``prefers-color-scheme: dark``); override them on any ancestor or pass ``accent="#HEX"``
+    to restyle."""
+    if accent is None:
+        return _CSS
+    from ..spec import ChipError
+    from ..themes import resolve_theme
+
+    try:
+        colour = resolve_theme("auto", accent).accent
+    except (TypeError, ValueError) as e:
+        raise ChipError(
+            f"mintchip.css: {e}.", fix_hint="Pass a hex colour like '#2563EB'."
+        ) from None
+    return _CSS.replace("--mc-accent:#3B7DDD", f"--mc-accent:{colour}").replace(
+        "--mc-accent:#5590E8", f"--mc-accent:{colour}"
+    )
 
 
 # --- pages ----------------------------------------------------------------------------------
@@ -186,8 +225,11 @@ def document(
     subtitle: str | None = None,
     source: str | None = None,
     theme: Any = "auto",
+    accent: str | None = None,
+    compact: bool = False,
 ) -> str:
-    """A self-contained reading page with no JavaScript: a title, then ``blocks`` on a measure
+    """A self-contained reading page with no JavaScript (or a transparent flush embed with
+    lightweight host theme sync when ``compact=True``): a title, then ``blocks`` on a measure
     of about 34em in the reader's system text face, adapting to light and dark (``theme``
     "light" or "dark" fixes one). A block is an HTML string (block-level markup is kept as is;
     anything else, such as ``format_prose(..., format="html")`` output, becomes a ``<p>``), a
@@ -197,12 +239,12 @@ def document(
     from ..themes import resolve_theme
 
     try:
-        name = resolve_theme(theme).name
+        name = resolve_theme(theme, accent).name
     except (TypeError, ValueError) as e:
         raise ChipError(f"mintchip.document: {e}.", fix_hint="Use theme='auto'.") from None
     if isinstance(blocks, str) or not hasattr(blocks, "__iter__"):
         blocks = [blocks]
-    parts = [f"<h1>{html.escape(title)}</h1>"]
+    parts = [f"<h1>{html.escape(title)}</h1>"] if title else []
     if subtitle:
         parts.append(f'<p class="mc-sub">{html.escape(subtitle)}</p>')
     for i, b in enumerate(blocks):
@@ -212,9 +254,10 @@ def document(
             else:
                 parts.append(b if _BLOCK.match(b.lstrip()) else f"<p>{b}</p>")
         elif isinstance(b, Chip):
-            parts.append(f"<p>{b.html(theme=theme)}</p>")
+            parts.append(f"<p>{b.html(theme=theme, accent=accent)}</p>")
         elif callable(getattr(b, "html", None)):
-            parts.append(f'<div class="mc-wide">{b.html(theme=theme)}</div>')
+            kw = {"theme": theme, **({"accent": accent} if accent is not None else {})}
+            parts.append(f'<div class="mc-wide">{b.html(**kw)}</div>')
         else:
             raise ChipError(
                 f"mintchip.document: block {i} is a {type(b).__name__}.",
@@ -223,7 +266,7 @@ def document(
     if source:
         parts.append(f'<footer class="mc-src">Source: {html.escape(source)}</footer>')
     scheme = {"dark": "dark", "light": "light", "mono": "light"}.get(name)
-    return _shell(title, "\n".join(parts), scheme)
+    return _shell(title or "mintchip", "\n".join(parts), scheme, accent=accent, compact=compact)
 
 
 def page(body: str, *, title: str = "mintchip") -> str:
@@ -231,12 +274,22 @@ def page(body: str, *, title: str = "mintchip") -> str:
     return _shell(title, f"<p>{body}</p>", None)
 
 
-def _shell(title: str, body: str, scheme: str | None) -> str:
+def _shell(
+    title: str,
+    body: str,
+    scheme: str | None,
+    *,
+    accent: str | None = None,
+    compact: bool = False,
+) -> str:
+    cls = "mc-page mc-compact" if compact else "mc-page"
     attr = f' data-mc-scheme="{scheme}"' if scheme else ""
+    style = css(accent) + (_COMPACT_CSS if compact else "")
+    sync = f"\n<script>{_THEME_SYNC_JS}</script>" if compact and scheme is None else ""
     return (
-        f'<!doctype html>\n<html lang="en" class="mc-page"{attr}>\n<head>\n<meta charset="utf-8">\n'
+        f'<!doctype html>\n<html lang="en" class="{cls}"{attr}>\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
         f'<meta name="color-scheme" content="{scheme or "light dark"}">\n'
-        f"<title>{html.escape(title)}</title>\n<style>{_CSS}</style>\n</head>\n"
-        f'<body>\n<main class="mc-doc">\n{body}\n</main>\n</body>\n</html>\n'
+        f"<title>{html.escape(title)}</title>\n<style>{style}</style>\n</head>\n"
+        f'<body>\n<main class="mc-doc">\n{body}\n</main>{sync}\n</body>\n</html>\n'
     )

@@ -82,3 +82,16 @@ def test_percent_near_the_ends_is_never_rounded_onto_them() -> None:
     assert mc.bar(0).text(compact=True).startswith("0% ")
     t = mc.table([{"a": 0.995}, {"a": 0.5}], {"a": "bar"}).text()
     assert "99.5%" in t and "50.0%" in t, "the column takes the one decimal"
+
+
+def test_percent_option_overrides_default_mode() -> None:
+    c = mc.bar(1, 1, percent=False)
+    assert c.text() == "1/1 (100%) ████████"
+    assert c.text(compact=True) == "1/1 ████████"
+    assert c.to_dict()["percent"] is False
+    assert mc.from_dict(c.to_dict()).text() == c.text()
+
+    p = mc.bar(38, 40, percent=True)
+    assert p.text() == "95% ███████▋"
+    assert p.to_dict()["percent"] is True
+    assert "percent" not in mc.bar(0.82).to_dict(), "default omits percent from spec"

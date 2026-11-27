@@ -103,14 +103,14 @@ nested.json. On large.json the runs took
 med 151.0 ms (n=18, IQR 149.0 to 152.8) [▂▂▄▄▄█▂▂▂▂]→240; the one slow run is an
 outlier. Peak memory fell 84→61 MB (−23 MB) [··●────○··].
 
-input              main        new  change, 95% CI
-                                         −38      +9.3
-──────────────────────────────────────────────────────
-small.json      1.92 ms    1.41 ms  −27% [··●┤····│··]
-medium.json    18.40 ms   12.90 ms  −30% [·├●·····│··]
-large.json    212.00 ms  151.00 ms  −29% [··●·····│··]
-nested.json    44.00 ms   46.10 ms   +5% [········├●┤]
-unicode.json   31.20 ms   22.80 ms  −27% [··●┤····│··]
+input            main      new  change, 95% CI
+                                     −38      +9.3
+──────────────────────────────────────────────────
+small.json    1.92 ms  1.41 ms  −27% [··●┤····│··]
+medium.json   18.4 ms  12.9 ms  −30% [·├●·····│··]
+large.json     212 ms   151 ms  −29% [··●·····│··]
+nested.json     44 ms  46.1 ms   +5% [········├●┤]
+unicode.json  31.2 ms  22.8 ms  −27% [··●┤····│··]
 ```
 
 <details><summary>The two commands that wrote it</summary>
@@ -132,14 +132,14 @@ $ cat bench.json
 ]
 $ mintchip table bench.json --col input --col main:num:main --col new:num:new --col 'change:ci:change, 95% CI' \
     --set main.unit=ms --set new.unit=ms --set change.unit=% --set change.level=0.95
-input              main        new  change, 95% CI
-                                         −38      +9.3
-──────────────────────────────────────────────────────
-small.json      1.92 ms    1.41 ms  −27% [··●┤····│··]
-medium.json    18.40 ms   12.90 ms  −30% [·├●·····│··]
-large.json    212.00 ms  151.00 ms  −29% [··●·····│··]
-nested.json    44.00 ms   46.10 ms   +5% [········├●┤]
-unicode.json   31.20 ms   22.80 ms  −27% [··●┤····│··]
+input            main      new  change, 95% CI
+                                     −38      +9.3
+──────────────────────────────────────────────────
+small.json    1.92 ms  1.41 ms  −27% [··●┤····│··]
+medium.json   18.4 ms  12.9 ms  −30% [·├●·····│··]
+large.json     212 ms   151 ms  −29% [··●·····│··]
+nested.json     44 ms  46.1 ms   +5% [········├●┤]
+unicode.json  31.2 ms  22.8 ms  −27% [··●┤····│··]
 ```
 
 </details>

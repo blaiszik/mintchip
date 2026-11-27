@@ -161,3 +161,31 @@ def test_document_theme_and_errors() -> None:
         mc.document("t", ["x"], theme="neon")
     with pytest.raises(mc.ChipError, match="block 1 is a int"):
         mc.document("t", ["x", 3])
+
+
+def test_css_ancestor_schemes_accent_and_table_emphasis() -> None:
+    s = mc.css()
+    for scheme in ("light", "dark"):
+        assert f'[data-mc-scheme="{scheme}"],[data-mc-scheme="{scheme}"] .mc,' in s
+        assert f'.mc[data-mc-scheme="{scheme}"],.mc-page[data-mc-scheme="{scheme}"]' in s
+    assert ".mc-table tr.mc-highlight" in s and ".mc-table tr.mc-baseline" in s
+
+    styled = mc.css(accent="#2563EB")
+    assert "--mc-accent:#2563EB" in styled
+    assert "--mc-accent:#3B7DDD" not in styled and "--mc-accent:#5590E8" not in styled
+    assert mc.css("#2563EB") == styled
+    with pytest.raises(mc.ChipError, match="accent"):
+        mc.css(accent="blue")
+
+
+def test_document_compact_and_accent() -> None:
+    chip = mc.REGISTRY["ci"].example_chip()
+    page = mc.document("Compact", [chip, FakeTable()], compact=True, accent="#2563EB")
+    assert '<html lang="en" class="mc-page mc-compact">' in page
+    assert "background:transparent" in page
+    assert "--mc-accent:#2563EB" in page
+    assert "<script>" in page and "themechange" in page and "data-mc-scheme" in page
+
+    fixed = mc.document("", [chip], theme="dark", compact=True)
+    assert 'class="mc-page mc-compact" data-mc-scheme="dark"' in fixed
+    assert "<script>" not in fixed and "<h1>" not in fixed

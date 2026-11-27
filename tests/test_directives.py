@@ -100,6 +100,17 @@ def test_html_is_a_full_page() -> None:
     assert "&lt;b&gt; &amp; " in out and out.count("<p>") >= 2 and "mc-num" in out
 
 
+def test_html_fragment_and_top_level_render_export() -> None:
+    assert mc.render is render and "render" in mc.__all__
+    frag, found = mc.render("<b> & {{num 3 unit=ms}}\n\nsecond {{spark 1 3 2}}", format="html", fragment=True)
+    assert len(found) == 2
+    assert "<!doctype" not in frag.lower() and "<html" not in frag and "<style>" not in frag
+    assert frag.startswith("<p>&lt;b&gt; &amp; ") and frag.count("<p>") == 2
+    assert "mc-num" in frag and "mc-spark" in frag and "popover" in frag
+    dark_frag, _ = mc.render("{{spark 1 3 2}}", format="html", fragment=True, theme="dark")
+    assert "currentColor" not in dark_frag and "mc-spark" in dark_frag
+
+
 def test_example_calls() -> None:
     assert example_call("ci") == "mintchip ci 0.08 0.05:0.11 --level 0.95 --label 'Retrieval lift'"
     assert (

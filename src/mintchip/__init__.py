@@ -28,7 +28,12 @@ from .scales import shared_domain, union_domain
 from .spec import REGISTRY, Chip, ChipError, Kind, Param, catalog, from_dict
 from .themes import THEMES, Theme, contrast_ratio, relative_luminance
 
-__version__ = "0.2.0.dev0"
+# Importing `.spec` binds the internal `mintchip.render` subpackage onto this module; remove the
+# attribute so `mintchip.render` resolves lazily to `mintchip.directives.render` while
+# `from mintchip.render.html import ...` still works via `sys.modules`.
+globals().pop("render", None)
+
+__version__ = "0.2.0"
 
 CATALOG = catalog()
 
@@ -38,6 +43,7 @@ _LAZY = {
     "table": "tables",
     "format_prose": "prose",
     "lint": "prose",
+    "render": "directives",
     "css": "render.html",
     "document": "render.html",
 }
@@ -83,6 +89,7 @@ __all__ = [
     "rank",
     "ratio",
     "relative_luminance",
+    "render",
     "share",
     "shared_domain",
     "spark",

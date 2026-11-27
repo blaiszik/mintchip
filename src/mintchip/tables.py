@@ -41,7 +41,9 @@ POSITION = frozenset({"ci", "dist", "gauge", "delta", "rank"})  # kinds drawn on
 EMPTY, EMPTY_ASCII = "—", "-"
 FIGURE_SPACE = "\u2007"  # a digit-wide space, for decimal alignment in HTML
 
-_HINT_ROWS = 'Pass a list of dicts, e.g. [{"model": "a", "acc": 0.82}], or a .json/.csv path.'
+_HINT_ROWS = (
+    'Pass a list of dicts, e.g. [{"model": "a", "acc": 0.82}], or a .json/.jsonl/.csv/.tsv path.'
+)
 _PLAIN_NUM = re.compile(r"^([+\-−]?\d[\d,]*)(\.\d+)?((?:e[+\-−]?\d+)?)$")
 _NUMBER = re.compile(r"^[+\-−]?(\d+\.?\d*|\.\d+)([eE][+\-−]?\d+)?$")
 _THOUSANDS = re.compile(r"^[+\-−]?\d{1,3}(,\d{3})+(\.\d+)?$")
@@ -78,23 +80,46 @@ class Table:
         descending: bool | None = None,
         limit: int | None = None,
         title: str | None = None,
+        highlight: Sequence[str] = (),
+        baseline: str | None = None,
     ) -> None:
         self.columns = tuple(columns)
         self.rows = tuple(tuple(r) for r in rows)
         self.index = tuple(index) if index is not None else tuple(range(len(self.rows)))
         self.sort, self.descending, self.limit, self.title = sort, descending, limit, title
+        self.highlight = tuple(highlight)
+        self.baseline = baseline
         self.domains = tuple(self._shared_domain(j) for j in range(len(self.columns)))
         self.decimals = tuple(self._shared_decimals(j) for j in range(len(self.columns)))
 
+    def _row_role(self, i: int) -> tuple[bool, bool]:
+        """Return ``(is_highlight, is_baseline)`` for display row ``i``."""
+        if not self.highlight and self.baseline is None:
+            return False, False
+        name_col = next((j for j, c in enumerate(self.columns) if c.kind == "text"), None)
+        if name_col is None:
+            return False, False
+        cell = self.rows[i][name_col]
+        if not isinstance(cell, str):
+            return False, False
+        return cell in self.highlight, cell == self.baseline
+
     def _shared_decimals(self, j: int) -> int | None:
         """The most decimal places a cell of chip column ``j`` prints its value with on its
-        own, so the whole column can use it; None for kinds whose value is not a decimal."""
+        own, so the whole column can use it; None for kinds whose value is not a decimal, or
+        when the column spans two or more orders of magnitude (so ``212`` beside ``1.92`` does
+        not become ``212.00``)."""
         col = self.columns[j]
         if col.kind == "text":
             return None
         cells = [r[j] for r in self.rows if isinstance(r[j], Chip) and r[j].kind == col.kind]
         found = [d for c in cells if (d := c._text_out(False, True, None).decimals) is not None]
-        return max(found, default=None)
+        if not found:
+            return None
+        mags = [abs(float(v)) for c in cells if (v := c.stats.get("value")) is not None and v != 0]
+        if len(mags) >= 2 and max(mags) / min(mags) >= 100:
+            return None
+        return max(found)
 
     def _shared_domain(self, j: int) -> tuple[float, float] | None:
         col = self.columns[j]
@@ -124,10 +149,15 @@ class Table:
         return (*out, *self._layout(ascii=False, color=False)[1])
 
     # --- text ---------------------------------------------------------------------------------
-    def text(self, *, ascii: bool = False, color: bool = False) -> str:
-        """Aligned monospace: a header, one rule, one line per row; at most 80 characters wide
-        where it can be (text columns are shortened first)."""
-        return self._layout(ascii=ascii, color=color)[0]
+    def text(self, *, ascii: bool = False, color: bool = False, width: int = WIDTH) -> str:
+        """Aligned monospace: a header, one rule, one line per row; at most ``width`` characters
+        wide where it can be (text columns are shortened first)."""
+        if isinstance(width, bool) or not isinstance(width, int) or width < 1:
+            raise ChipError(
+                f"mintchip.Table.text: width must be a whole number of 1 or more; got {width!r}.",
+                fix_hint="Pass width=80 or width=120.",
+            )
+        return self._layout(ascii=ascii, color=color, width=width)[0]
 
     def __str__(self) -> str:
         return self.text()
@@ -214,14 +244,16 @@ class Table:
                     line[a : a + len(label)] = label
         return "".join(line).rstrip()
 
-    def _layout(self, *, ascii: bool, color: bool) -> tuple[str, list[str]]:
+    def _layout(self, *, ascii: bool, color: bool, width: int = WIDTH) -> tuple[str, list[str]]:
         blocks = self._blocks(ascii, color)
         notes: list[str] = []
+        roles = [self._row_role(i) for i in range(len(self.rows))]
+        gutter = 2 if any(hi or base for hi, base in roles) else 0
         widths = [b.width for b in blocks]
-        total = sum(widths) + GAP * (len(widths) - 1)
-        if total > WIDTH:  # shorten text columns first, widest first
+        total = gutter + sum(widths) + GAP * (len(widths) - 1)
+        if total > width:  # shorten text columns first, widest first
             texts = [k for k, b in enumerate(blocks) if b.text]
-            while total > WIDTH:
+            while total > width:
                 k = max(texts, key=lambda k: widths[k], default=None)
                 if k is None or widths[k] <= MIN_TEXT:
                     break
@@ -232,31 +264,47 @@ class Table:
                     blocks[k].clip(widths[k], ascii)
                     notes.append(
                         f"text render: column {self.columns[k].key!r} shortened to "
-                        f"{widths[k]} characters to fit {WIDTH} columns."
+                        f"{widths[k]} characters to fit {width} columns."
                     )
-        if total > WIDTH:  # then headers wider than their column's content
+        if total > width:  # then headers wider than their column's content
             for k, b in enumerate(blocks):
                 content = b.content_width
-                if not b.text and len(b.header) > content and total > WIDTH:
-                    cut = max(content, len(b.header) - (total - WIDTH))
+                if not b.text and len(b.header) > content and total > width:
+                    cut = max(content, len(b.header) - (total - width))
                     b.header = _clip(b.header, cut, ascii)
                     total -= widths[k] - b.width
                     widths[k] = b.width
-        if total > WIDTH:
+        if total > width:
             notes.append(
-                f"text render is {total} characters wide, over {WIDTH}; drop a column or "
+                f"text render is {total} characters wide, over {width}; drop a column or "
                 "use shorter values."
             )
         sep = " " * GAP
+        pad = " " * gutter
         lines = []
         if self.title:
             lines.append(_tx(self.title, ascii))
-        lines.append(sep.join(b.head(w) for b, w in zip(blocks, widths, strict=True)))
+        lines.append(pad + sep.join(b.head(w) for b, w in zip(blocks, widths, strict=True)))
         if any(b.scale for b in blocks):
-            lines.append(sep.join(b.scale.ljust(w) for b, w in zip(blocks, widths, strict=True)))
+            lines.append(
+                pad + sep.join(b.scale.ljust(w) for b, w in zip(blocks, widths, strict=True))
+            )
         lines.append(("-" if ascii else "─") * total)
         for i in range(len(self.rows)):
-            lines.append(sep.join(b.cell(i, w) for b, w in zip(blocks, widths, strict=True)))
+            hi, base = roles[i]
+            if gutter:
+                prefix = ("> " if ascii else "▸ ") if hi else (". " if ascii else "· ") if base else "  "
+            else:
+                prefix = ""
+            line = (
+                prefix + sep.join(b.cell(i, w) for b, w in zip(blocks, widths, strict=True))
+            ).rstrip()
+            if color:
+                if hi:
+                    line = _ansi_wrap(line, "1")
+                elif base:
+                    line = _ansi_wrap(line, "2")
+            lines.append(line)
         return "\n".join(line.rstrip() for line in lines), notes
 
     # --- markdown -----------------------------------------------------------------------------
@@ -275,15 +323,22 @@ class Table:
         lines = [f"**{_md_escape(self.title)}**", ""] if self.title else []
         lines += ["| " + " | ".join(head) + " |", "|" + "|".join(rule) + "|"]
         for i, row in enumerate(self.rows):
+            hi, base = self._row_role(i)
             out = []
             for j, b in enumerate(blocks):
                 cell = row[j]
                 if cell is None:
                     out.append(EMPTY)
                 elif b.text:
-                    out.append(_md_escape(str(cell)))
+                    txt = _md_escape(str(cell))
+                    if hi:
+                        txt = f"**{txt}**"
+                    elif base:
+                        txt = f"*{txt}*"
+                    out.append(txt)
                 else:
-                    out.append(_code(b.rows[i][0].rstrip()))
+                    code = _code(b.rows[i][0].rstrip())
+                    out.append(f"**{code}**" if hi else code)
             lines.append("| " + " | ".join(out) + " |")
         return "\n".join(lines)
 
@@ -353,7 +408,10 @@ class Table:
                         details=False,
                     )
                     tds.append(f'<td class="mc-graph">{g}</td>')
-            out.append("<tr>" + "".join(tds) + "</tr>")
+            hi, base = self._row_role(i)
+            row_cls = " ".join(c for c, on in (("mc-highlight", hi), ("mc-baseline", base)) if on)
+            tr_open = f'<tr class="{row_cls}">' if row_cls else "<tr>"
+            out.append(tr_open + "".join(tds) + "</tr>")
         out.append("</tbody></table>")
         return "\n".join(out)
 
@@ -376,7 +434,71 @@ class Table:
     def _blocks_scale(self, j: int) -> bool:
         return bool(self._chip_block(j, False, False).scale)
 
-    # --- data ---------------------------------------------------------------------------------
+    # --- data & save --------------------------------------------------------------------------
+    def save(self, path: str | Path, **render_options: Any) -> dict[str, Any]:
+        """Write ``.html`` (standalone page, or bare table with ``fragment=True``), ``.md``,
+        ``.txt`` or ``.json``; returns a summary dict with ``path``."""
+        dest = Path(path)
+        suffix = dest.suffix.lower()
+        try:
+            if suffix in (".html", ".htm"):
+                from .render import html as _html_mod
+                from .themes import resolve_theme
+
+                opts = dict(render_options)
+                fragment = opts.pop("fragment", False)
+                compact = opts.pop("compact", False)
+                table_html = self.html(**opts)
+                if fragment:
+                    content = table_html + "\n"
+                else:
+                    theme = opts.get("theme", "auto")
+                    accent = opts.get("accent")
+                    try:
+                        name = resolve_theme(theme, accent).name
+                    except (TypeError, ValueError) as e:
+                        raise ChipError(
+                            f"mintchip.Table.save: {e}.", fix_hint="Use theme='auto'."
+                        ) from None
+                    scheme = {"dark": "dark", "light": "light", "mono": "light"}.get(name)
+                    content = _html_mod._shell(
+                        self.title or "mintchip",
+                        f'<div class="mc-wide">{table_html}</div>',
+                        scheme,
+                        accent=accent,
+                        compact=compact,
+                    )
+            elif suffix in (".md", ".markdown"):
+                content = self.markdown(**render_options) + "\n"
+            elif suffix == ".txt":
+                content = self.text(**render_options) + "\n"
+            elif suffix == ".json":
+                content = json.dumps(self.to_dict(), ensure_ascii=False, **render_options) + "\n"
+            else:
+                raise ChipError(
+                    f"mintchip.Table.save: unsupported extension {suffix!r}.",
+                    fix_hint="Save as .html, .md, .txt or .json.",
+                )
+        except TypeError as e:
+            raise ChipError(
+                f"mintchip.Table.save: {e}.",
+                fix_hint="Pass only the options of the matching render method.",
+            ) from None
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(content, encoding="utf-8")
+        return {
+            "rows": len(self.rows),
+            "columns": [c.key for c in self.columns],
+            "title": self.title,
+            "warnings": list(self.warnings),
+            "path": str(dest),
+        }
+
+    def _repr_html_(self) -> str:
+        from .render import html as _html_mod
+
+        return f"<style>{_html_mod.css()}</style>{self.html()}"
+
     def to_dict(self) -> dict[str, Any]:
         """JSON-safe; ``Table.from_dict(t.to_dict())`` (or ``table(**d)``) rebuilds the table.
         Rows are stored in display order, each chip cell as its ``chip.to_dict()`` spec."""
@@ -386,7 +508,7 @@ class Table:
             for col, cell in zip(self.columns, r, strict=True):
                 row[col.key] = cell.to_dict() if isinstance(cell, Chip) else cell
             rows.append(row)
-        return {
+        out: dict[str, Any] = {
             "rows": rows,
             "columns": {c.key: c.spec() for c in self.columns},
             "sort": self.sort,
@@ -394,6 +516,11 @@ class Table:
             "limit": self.limit,
             "title": self.title,
         }
+        if self.highlight:
+            out["highlight"] = list(self.highlight)
+        if self.baseline is not None:
+            out["baseline"] = self.baseline
+        return out
 
     @classmethod
     def from_dict(cls, d: Mapping[str, Any]) -> Table:
@@ -403,7 +530,7 @@ class Table:
                 "mintchip.Table.from_dict needs a dict with a 'rows' key.",
                 fix_hint="Pass the output of Table.to_dict().",
             )
-        keys = ("rows", "columns", "sort", "descending", "limit", "title")
+        keys = ("rows", "columns", "sort", "descending", "limit", "title", "highlight", "baseline")
         return table(**{k: d[k] for k in keys if k in d})
 
 
@@ -483,6 +610,11 @@ def _align_glyphs(kind: str, glyphs: list[tuple[str, str]]) -> list[tuple[str, s
     return out
 
 
+def _ansi_wrap(line: str, sgr: str) -> str:
+    """Wrap a line in an ANSI SGR code, re-opening it after any inner reset."""
+    return f"\x1b[{sgr}m" + line.replace("\x1b[0m", f"\x1b[0m\x1b[{sgr}m") + "\x1b[0m"
+
+
 def _clip(s: str, w: int, ascii: bool) -> str:
     if len(s) <= w:
         return s
@@ -514,15 +646,17 @@ def table(
     descending: bool | None = None,
     limit: int | None = None,
     title: str | None = None,
+    highlight: str | Sequence[str] | None = None,
+    baseline: str | None = None,
 ) -> Table:
     """A table of small multiples: one row per item, one shared scale per chip column.
 
-    ``rows`` is a sequence of mappings, or a path to a ``.json`` file (a list of objects) or a
-    ``.csv`` file. ``columns`` maps row key → spec, in display order: a kind name (``"bar"``,
-    ``"ci"``, ``"spark"``, ``"num"``, …), ``"text"``, or a dict ``{"chip": kind, "header": str,
-    "share": bool, **constructor keyword arguments for every cell}``. With ``columns=None`` every
-    key of the first row is shown: strings as text, numbers as ``num``, lists of numbers as
-    ``spark``.
+    ``rows`` is a sequence of mappings, or a path to a ``.json`` (list of objects), ``.jsonl``,
+    ``.csv`` or ``.tsv`` file. ``columns`` maps row key → spec, in display order: a kind name
+    (``"bar"``, ``"ci"``, ``"spark"``, ``"num"``, …), ``"text"``, or a dict ``{"chip": kind,
+    "header": str, "share": bool, **constructor keyword arguments for every cell}``. With
+    ``columns=None`` every key of the first row is shown: strings as text, numbers as ``num``,
+    lists of numbers as ``spark``.
 
     A cell is a ``Chip``, a dict of constructor arguments, or a bare value filling the kind's
     positional parameters in order (a list or tuple is unpacked when the kind has several, and a
@@ -530,7 +664,8 @@ def table(
     ``None`` or a missing key is an empty cell. ``sort`` names a column: chip columns sort by
     their primary value, largest first, and text columns alphabetically, A to Z; ``descending``
     True or False overrides either direction. Empty cells sort last. ``limit`` keeps the first
-    rows after sorting.
+    rows after sorting. ``highlight`` and ``baseline`` emphasise rows matching the first text
+    column.
     """
     data = _load_rows(rows)
     cols = _columns(columns, data)
@@ -550,10 +685,14 @@ def table(
             f"mintchip.table: title must be a string; got {title!r}.",
             fix_hint='Pass title="Benchmark results".',
         )
+    hi = _normalize_highlight(highlight)
+    base = _normalize_baseline(baseline)
     built = [[_cell(i, c, row.get(c.key)) for c in cols] for i, row in enumerate(data)]
     for j, c in enumerate(cols):
         if c.kind == "share" and "sort" not in c.options:
             _keep_part_order(built, j)
+        elif c.kind == "bar" and "percent" not in c.options:
+            _keep_bar_wording(built, j)
     order = list(range(len(built)))
     if descending is not None and not isinstance(descending, bool):
         raise ChipError(
@@ -576,7 +715,40 @@ def table(
         descending=descending,
         limit=limit,
         title=title,
+        highlight=hi,
+        baseline=base,
     )
+
+
+def _normalize_highlight(highlight: Any) -> tuple[str, ...]:
+    if highlight is None:
+        return ()
+    if isinstance(highlight, str):
+        return (highlight,) if highlight else ()
+    if isinstance(highlight, (bytes, Mapping)) or not isinstance(highlight, Iterable):
+        raise ChipError(
+            "mintchip.table: highlight must be a string or sequence of strings; "
+            f"got {type(highlight).__name__}.",
+            fix_hint='Pass highlight="model_a" or highlight=["model_a", "model_b"].',
+        )
+    items = list(highlight)
+    if not all(isinstance(x, str) for x in items):
+        raise ChipError(
+            "mintchip.table: highlight entries must be strings.",
+            fix_hint='Pass highlight=["model_a", "model_b"].',
+        )
+    return tuple(x for x in items if x)
+
+
+def _normalize_baseline(baseline: Any) -> str | None:
+    if baseline is None:
+        return None
+    if not isinstance(baseline, str):
+        raise ChipError(
+            f"mintchip.table: baseline must be a string; got {type(baseline).__name__}.",
+            fix_hint='Pass baseline="baseline".',
+        )
+    return baseline or None
 
 
 def _keep_part_order(built: list[list[Cell]], j: int) -> None:
@@ -592,6 +764,17 @@ def _keep_part_order(built: list[list[Cell]], j: int) -> None:
         built[i][j] = from_dict({**c.to_dict(), "sort": False})
 
 
+def _keep_bar_wording(built: list[list[Cell]], j: int) -> None:
+    """When a bar column mixes count totals (e.g. 38/40) with a row whose total happens to be
+    1 (e.g. 1/1), keep count wording instead of switching that single cell to ``100%``."""
+    cells = [(i, r[j]) for i, r in enumerate(built) if isinstance(r[j], Chip) and r[j].kind == "bar"]
+    if len(cells) < 2 or not any(not c.stats["pct_mode"] for _, c in cells):
+        return
+    for i, c in cells:
+        if c.stats["pct_mode"] and c.unit != "%" and "percent" not in c.args:
+            built[i][j] = from_dict({**c.to_dict(), "percent": False})
+
+
 def _sort_key(cell: Cell) -> Any:
     if isinstance(cell, Chip):
         v = cell.stats.get("value")
@@ -603,9 +786,11 @@ def _load_rows(rows: Any) -> list[Mapping[str, Any]]:
     if isinstance(rows, (str, os.PathLike)):
         path = Path(rows)
         suffix = path.suffix.lower()
-        if suffix not in (".json", ".csv"):
-            raise ChipError(f"mintchip.table: rows path {str(path)!r} is not .json or .csv.",
-                            fix_hint=_HINT_ROWS)  # fmt: skip
+        if suffix not in (".json", ".jsonl", ".csv", ".tsv"):
+            raise ChipError(
+                f"mintchip.table: rows path {str(path)!r} is not .json, .jsonl, .csv or .tsv.",
+                fix_hint=_HINT_ROWS,
+            )
         try:
             raw = path.read_text(encoding="utf-8-sig")
         except OSError as e:
@@ -613,11 +798,28 @@ def _load_rows(rows: Any) -> list[Mapping[str, Any]]:
                             fix_hint="Check the path.") from None  # fmt: skip
         if suffix == ".csv":
             return list(csv.DictReader(raw.splitlines()))
-        try:
-            rows = json.loads(raw)
-        except ValueError as e:
-            raise ChipError(f"mintchip.table: {str(path)!r} is not valid JSON ({e}).",
-                            fix_hint="The file must hold a list of objects.") from None  # fmt: skip
+        if suffix == ".tsv":
+            return list(csv.DictReader(raw.splitlines(), delimiter="\t"))
+        if suffix == ".jsonl":
+            parsed = []
+            for lineno, line in enumerate(raw.splitlines(), 1):
+                s = line.strip()
+                if not s:
+                    continue
+                try:
+                    parsed.append(json.loads(s))
+                except ValueError as e:
+                    raise ChipError(
+                        f"mintchip.table: {str(path)!r} line {lineno} is not valid JSON ({e}).",
+                        fix_hint="Each non-empty line in a .jsonl file must be a JSON object.",
+                    ) from None
+            rows = parsed
+        else:
+            try:
+                rows = json.loads(raw)
+            except ValueError as e:
+                raise ChipError(f"mintchip.table: {str(path)!r} is not valid JSON ({e}).",
+                                fix_hint="The file must hold a list of objects.") from None  # fmt: skip
     if isinstance(rows, (bytes, Mapping)) or not isinstance(rows, Iterable):
         raise ChipError(
             f"mintchip.table: rows must be a list of dicts; got {type(rows).__name__}.",

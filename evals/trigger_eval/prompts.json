@@ -1,0 +1,130 @@
+{
+  "version": "1.0",
+  "description": "20-prompt offline skill trigger evaluation for word-sized inline graphics and zero-dep terminal/Markdown tables (10 positive, 10 negative; none name the tool).",
+  "exit_gates": {
+    "min_recall": 0.9,
+    "max_false_trigger_rate": 0.0
+  },
+  "prompts": [
+    {
+      "id": "pos_01_loss_sparkline",
+      "category": "trend_inline",
+      "should_trigger": true,
+      "prompt": "Summarize the validation loss trajectory across the last 8 epochs (1.84, 1.51, 1.32, 1.10, 0.96, 0.72, 0.55, 0.42) inline in a short status update with the 0.38-0.48 target band."
+    },
+    {
+      "id": "pos_02_ci_lift",
+      "category": "interval_inline",
+      "should_trigger": true,
+      "prompt": "Report our retrieval experiment result in a Markdown PR summary: accuracy lift is +0.08 with a 95% confidence interval of +0.05 to +0.11 relative to zero."
+    },
+    {
+      "id": "pos_03_before_after_delta",
+      "category": "before_after_inline",
+      "should_trigger": true,
+      "prompt": "Write a concise PR comment showing our before-and-after peak memory improvement from 84 MB down to 61 MB and p95 latency from 210 ms down to 145 ms."
+    },
+    {
+      "id": "pos_04_junit_test_strip",
+      "category": "test_run_strip",
+      "should_trigger": true,
+      "prompt": "Turn this JUnit XML test run report (14 passed, 2 failed, 1 skipped across our suites) into a compact pass/fail status summary for the terminal."
+    },
+    {
+      "id": "pos_05_latency_distribution",
+      "category": "distribution_inline",
+      "should_trigger": true,
+      "prompt": "Summarize these 12 raw request latency samples in ms (18.9, 19.4, 19.8, 20.1, 20.3, 20.3, 20.9, 21.6, 22.8, 23.0, 23.4, 47.8) and highlight the outlier clearly inline."
+    },
+    {
+      "id": "pos_06_git_diff_share",
+      "category": "composition_share",
+      "should_trigger": true,
+      "prompt": "Take this git diff --numstat output and show the breakdown of changed lines by top-level directory (src, tests, docs) as a compact inline share bar."
+    },
+    {
+      "id": "pos_07_benchmark_table",
+      "category": "small_multiple_table",
+      "should_trigger": true,
+      "prompt": "Compare these 5 model benchmark variants in results.json across accuracy, 95% CI lift, and loss trend in a compact terminal and Markdown comparison table."
+    },
+    {
+      "id": "pos_08_hyperfine_diff",
+      "category": "benchmark_diff",
+      "should_trigger": true,
+      "prompt": "Diff these two hyperfine JSON benchmark runs (base.json vs head.json) in the terminal and flag any timing regression over 5%."
+    },
+    {
+      "id": "pos_09_coverage_bar",
+      "category": "target_progress_bar",
+      "should_trigger": true,
+      "prompt": "Report module test coverage at 82% against our 90% release target inline in the build summary."
+    },
+    {
+      "id": "pos_10_go_cargo_bench",
+      "category": "swe_benchmark_table",
+      "should_trigger": true,
+      "prompt": "Format this go test -bench output with ns/op timings and B/op allocations into a readable monospace table for our pull request."
+    },
+    {
+      "id": "neg_01_fix_keyerror",
+      "category": "routine_bugfix",
+      "should_trigger": false,
+      "prompt": "Fix the KeyError in parse_config() when the optional timeout key is missing from settings.toml."
+    },
+    {
+      "id": "neg_02_refactor_class",
+      "category": "routine_refactor",
+      "should_trigger": false,
+      "prompt": "Refactor TokenValidator into two smaller helper classes and update all call sites and imports across the package."
+    },
+    {
+      "id": "neg_03_explain_traceback",
+      "category": "stack_trace",
+      "should_trigger": false,
+      "prompt": "Explain this Python traceback: AttributeError: 'NoneType' object has no attribute 'encode' in worker.py line 84."
+    },
+    {
+      "id": "neg_04_add_cli_flag",
+      "category": "routine_code_edit",
+      "should_trigger": false,
+      "prompt": "Add a --timeout CLI flag to scripts/sync.py using argparse and pass it down to urllib.request.urlopen."
+    },
+    {
+      "id": "neg_05_write_unit_tests",
+      "category": "routine_unit_tests",
+      "should_trigger": false,
+      "prompt": "Write pytest unit tests covering expired JWT tokens and invalid HMAC signatures in auth.py."
+    },
+    {
+      "id": "neg_06_git_rebase_conflict",
+      "category": "git_operations",
+      "should_trigger": false,
+      "prompt": "Help me resolve this git rebase merge conflict in pyproject.toml without losing the dev dependencies."
+    },
+    {
+      "id": "neg_07_explain_architecture",
+      "category": "code_explanation",
+      "should_trigger": false,
+      "prompt": "Walk me through the architecture of this repository and how HTTP requests flow through middleware to handlers."
+    },
+    {
+      "id": "neg_08_single_bare_scalar",
+      "category": "bare_scalar",
+      "should_trigger": false,
+      "prompt": "What was the single peak memory value in run 4? Just tell me the number."
+    },
+    {
+      "id": "neg_09_two_bare_counts",
+      "category": "bare_scalar",
+      "should_trigger": false,
+      "prompt": "How many tests passed and how many failed in the last run? Just give me those two counts in a sentence."
+    },
+    {
+      "id": "neg_10_publication_multipanel_plate",
+      "category": "full_publication_plot",
+      "should_trigger": false,
+      "prompt": "Generate a double-column Nature manuscript multi-panel scatter and violin figure in millimeters from experiments.csv and audit the Matplotlib script with PDF preflight."
+    }
+  ]
+}

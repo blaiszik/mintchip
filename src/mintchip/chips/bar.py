@@ -51,13 +51,16 @@ EDGE = 0.01  # a share this close to 0 or to the whole (but not on it) prints on
             "Give an earlier or comparison value, drawn as a notch under the track.",
         ),
         Param("target", "number", "Give a goal, drawn as a tick across the track."),
+        Param("percent", "bool", "Show the value as a percentage instead of value/total."),
         Param("label", "string", "Say what is measured."),
         Param("unit", "string", "Name the unit of value and total."),
     ),
     example={"value": 0.82, "target": 0.9, "label": "Test coverage"},
     size="m",
 )
-def bar(value, total=1.0, *, baseline=None, target=None, label=None, unit=None) -> Built:
+def bar(
+    value, total=1.0, *, baseline=None, target=None, percent=None, label=None, unit=None
+) -> Built:
     if total <= 0:
         raise ChipError(
             f"total must be positive; got {fmt.num(total)}.",
@@ -74,7 +77,10 @@ def bar(value, total=1.0, *, baseline=None, target=None, label=None, unit=None) 
                 f"{name} {fmt.num(v)} must lie between 0 and the total {fmt.num(total)}.",
                 fix_hint=f"Pass {name}= on the same scale as value, at most total.",
             )
-    pct_mode = (unit is None and total == 1) or (unit == "%" and total == 100)
+    if percent is None:
+        pct_mode = (unit is None and total == 1) or (unit == "%" and total == 100)
+    else:
+        pct_mode = percent
     s = {
         "value": value,
         "total": total,
