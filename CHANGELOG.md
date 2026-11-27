@@ -4,6 +4,17 @@ All notable changes to `mintchip` are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html) once 1.0 is reached.
 
+## [0.2.1] - 2026-11-27
+
+### Added
+- **Zero-yellow mint themes (`mint` and `mint_dark`):** All ink/accent/good/bad/warn roles pass WCAG AA ≥ 4.5:1 contrast on `#FFFFFF` and `#14181F`, with automatic `data-mc-scheme` support in `mintchip.document()` and `Table.save()`.
+- **4 new zero-dependency inline micro-graphic chips:**
+  - `mintchip.bullet(value, target, ranges=...)`: Stephen Few inline bullet graph with qualitative bands, actual bar, and target tick.
+  - `mintchip.heat(values, ...)`: single-row word-sized heatmap strip with graduated intensity slots.
+  - `mintchip.hist(samples, bins=..., reference=...)`: miniature inline histogram with modal-bin highlight and skew/bimodality facts.
+  - `mintchip.status(passed, failed=0, skipped=0)`: stacked CI pass/fail/skip bar preserving visible failure slivers even at 1/1,000.
+- Updated `README.md`, `gallery/README.md`, `skills/mintchip/SKILL.md`, `llms.txt`, and golden tests.
+
 ## [0.2.0] - 2026-11-27
 
 ### Added

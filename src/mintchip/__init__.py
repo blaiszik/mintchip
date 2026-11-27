@@ -39,7 +39,7 @@ from .themes import THEMES, Theme, contrast_ratio, relative_luminance
 # `from mintchip.render.html import ...` still works via `sys.modules`.
 globals().pop("render", None)
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 CATALOG = catalog()
 
